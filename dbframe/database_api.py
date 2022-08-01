@@ -18,7 +18,7 @@ class DatabaseTemplate(ABC):
         date_name: str = 'date',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
-        is_cache: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -62,7 +62,7 @@ def read_df(
     date_name: str = 'date',
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
-    is_cache: bool = True,
+    is_cache: bool = False,
     **kwargs,
 ) -> pd.DataFrame:
     return database.read_df(

@@ -77,7 +77,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        mode: str = 'update',
+        mode: str = 'insert',
         format: str = 'table',
         complib=None,
         complevel: int = None,
@@ -209,7 +209,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         stop_idx: int = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = True,
-        is_cache: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -255,7 +255,7 @@ def read_h5(
     stop_idx: int = None,
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = True,
-    is_cache: bool = True,
+    is_cache: bool = False,
     **kwargs,
 ) -> pd.DataFrame:
     """
@@ -282,7 +282,7 @@ def save_h5(
     database: HdfsDB,
     df: pd.DataFrame,
     table: str,
-    mode: str = 'update',
+    mode: str = 'insert',
     format: str = 'table',
     complib: str = None,
     complevel: int = None,

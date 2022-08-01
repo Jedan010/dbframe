@@ -105,7 +105,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         is_sort_index: bool = True,
         is_drop_duplicates: bool = True,
         is_compress: bool = False,
-        is_cache: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -173,7 +173,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         df: pd.DataFrame,
         table: str,
         is_compress: bool = False,
-        mode: str = 'update',
+        mode: str = 'insert',
         groupby_name: Union[str, List[str]] = 'date',
         chunk_period: str = 'D',
         date_name: str = 'date',
@@ -849,7 +849,7 @@ def save_mongo(
     df: pd.DataFrame,
     table: str,
     is_compress: bool = False,
-    mode: str = 'update',
+    mode: str = 'insert',
     groupby_name: Union[str, Tuple[str]] = 'date',
     chunk_period: str = 'D',
     date_name: str = 'date',

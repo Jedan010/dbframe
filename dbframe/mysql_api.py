@@ -133,7 +133,7 @@ class MysqlDB(DatabaseTemplate):
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
         op_format: str = None,
-        is_cache: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ):
         """
@@ -163,7 +163,7 @@ class MysqlDB(DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        mode: str = 'update',
+        mode: str = 'insert',
         if_exists: str = 'append',
         index: bool = False,
         **kwargs,
@@ -235,7 +235,7 @@ def read_sql(
     is_drop_duplicate_index: bool = False,
     other_sql: str = None,
     op_format: str = None,
-    is_cache: bool = True,
+    is_cache: bool = False,
     **kwargs,
 ):
     """
@@ -263,7 +263,7 @@ def save_sql(
     database: MysqlDB,
     df: pd.DataFrame,
     table: str,
-    mode: str = 'update',
+    mode: str = 'insert',
     if_exists: str = 'append',
     index: bool = False,
     **kwargs,

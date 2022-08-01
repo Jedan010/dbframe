@@ -157,7 +157,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_drop_duplicate_index: bool = True,
         other_sql: str = None,
         op_format: str = 'TabSeparatedWithNamesAndTypes',
-        is_cache: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         if is_cache:
@@ -267,11 +267,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        is_partition: bool = True,
+        is_partition: bool = False,
         date_name: str = None,
         is_compress: bool = False,
         compress_type: str = 'LZ4HC',
         compress_level: int = 9,
+        is_drop_duplicate_index: bool = False,
     ) -> int:
 
         if df.empty:
@@ -296,7 +297,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
             )
 
         if df.index.names[0] is not None:
-            df = df.sort_index().pipe(lambda x: x.loc[~x.index.duplicated()])
+            if is_drop_duplicate_index:
+                df = df.sort_index().pipe(
+                    lambda x: x.loc[~x.index.duplicated()])
             df = df.reset_index()
 
         df = self.chg_df_dtype(df, table)
@@ -327,7 +330,7 @@ def read_ch(
     is_drop_duplicate_index: bool = True,
     other_sql: str = None,
     op_format: str = 'TabSeparatedWithNamesAndTypes',
-    is_cache: bool = True,
+    is_cache: bool = False,
     **kwargs,
 ):
     if isinstance(database, str):
