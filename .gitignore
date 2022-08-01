@@ -1,0 +1,12 @@
+*.pyc
+*.log
+*.egg-info
+.ipynb_checkpoints
+*.ipynb
+.idea
+*.cpython-36
+__pycache__
+
+.vscode
+docs/build/
+!docs/build/html/sample
