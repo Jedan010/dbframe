@@ -62,13 +62,16 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
     def _safe_operation(self, func):
         @wraps(func)
         def decorated(*args, **kwargs):
+            mode = self.mode
+            if func.__name__ in ['append', 'save_df']:
+                mode = 'a'
+            self.open(mode=mode)
             try:
-                self.open(mode=self.mode)
                 res = func(*args, **kwargs)
-                self.close()
             except Exception as e:
-                self.close()
                 raise e
+            finally:
+                self.close()
             return res
 
         return decorated
@@ -162,11 +165,12 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             where = []
         elif isinstance(where, str):
             where = [where]
+        _df: pd.DataFrame = self.select(table, start=-1)
+        if _df.empty:
+            return _df
         if start is not None or end is not None:
-            _df: pd.DataFrame = self.select(table, start=-1)
-            if _df.empty:
-                return _df
-            if not isinstance(_df.index, pd.MultiIndex):
+            if not isinstance(_df.index,
+                              pd.MultiIndex) and _df.index.name == date_name:
                 date_name = 'index'
             if start is not None:
                 where.append(f'{date_name} >= "{start}"')
@@ -175,8 +179,11 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if symbols is not None:
             if isinstance(symbols, str):
                 symbols = [symbols]
-            where.append(f"symbol = {symbols}")
-
+            symbol_name = 'symbol'
+            if not isinstance(_df.index,
+                              pd.MultiIndex) and _df.index.name == symbol_name:
+                symbol_name = 'index'
+            where.append(f"{symbol_name} = {symbols}")
         if fields is not None and isinstance(fields, str):
             fields = [fields]
 
@@ -236,7 +243,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
 
     @property
     def tables(self):
-        return self.keys()
+        return [x.replace("/", "") for x in self.keys()]
 
     def __hash__(self) -> int:
         return hash(self._path)
