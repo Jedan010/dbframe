@@ -1,3 +1,4 @@
+from logging import warning
 import re
 from typing import List
 
@@ -40,8 +41,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
         self._tcp_port = tcp_port
         self._http_port = http_port
         self._compression = compression
-        self.engine = create_engine(
-            f"clickhouse://{user}:{password}@{host}:{http_port}/{database}")
+        try:
+            self.engine = create_engine(
+                f"clickhouse://{user}:{password}@{host}:{http_port}/{database}"
+            )
+        except:
+            warning("没有安装 sqlalchemy-clickhouse 库")
 
         kwargs['host'] = host
         kwargs['database'] = database
@@ -81,7 +86,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         date_name: str = 'date',
         index_col: List[str] = None,
         is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = True,
+        is_drop_duplicate_index: bool = False,
         other_sql: str = None,
         op_format: str = 'TabSeparatedWithNamesAndTypes',
         **kwargs,
@@ -154,7 +159,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         date_name: str = 'date',
         index_col: List[str] = None,
         is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = True,
+        is_drop_duplicate_index: bool = False,
         other_sql: str = None,
         op_format: str = 'TabSeparatedWithNamesAndTypes',
         is_cache: bool = False,
@@ -306,6 +311,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return self.insert_dataframe(f"INSERT INTO {table} VALUES", df)
 
+    def get_table_ddl(self, table: str):
+        ddl = self.execute(f"show create {table}")[0][0]
+        return ddl
+
     def __hash__(self) -> int:
         return hash((self._host, self._tcp_port, self._database))
 
@@ -327,7 +336,7 @@ def read_ch(
     date_name: str = 'date',
     index_col: List[str] = None,
     is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = True,
+    is_drop_duplicate_index: bool = False,
     other_sql: str = None,
     op_format: str = 'TabSeparatedWithNamesAndTypes',
     is_cache: bool = False,
