@@ -70,7 +70,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         date_name: str = 'date',
         index_cols: Union[int, str, List[int], List[str]] = 0,
         is_sort_index: bool = True,
-        is_drop_duplicates: bool = True,
+        is_drop_duplicates: bool = False,
         is_compress: bool = False,
         **kwargs,
     ):
@@ -103,7 +103,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         date_name: str = 'date',
         index_cols: Union[int, str, List[int], List[str]] = 0,
         is_sort_index: bool = True,
-        is_drop_duplicates: bool = True,
+        is_drop_duplicates: bool = False,
         is_compress: bool = False,
         is_cache: bool = False,
         **kwargs,
@@ -297,7 +297,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         sort: List = None,
         limit: int = 0,
         is_sort_index: bool = True,
-        is_drop_duplicates: bool = True,
+        is_drop_duplicates: bool = False,
         **kwargs,
     ) -> Union[pd.DataFrame, pd.Series]:
         """
@@ -501,7 +501,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         sort: Tuple[Tuple[str, int]] = None,
         limit: int = 0,
         is_sort_index: bool = True,
-        is_drop_duplicates: bool = True,
+        is_drop_duplicates: bool = False,
         **kwargs,
     ) -> Union[pd.DataFrame, pd.Series]:
         """
@@ -779,9 +779,9 @@ def read_mongo(
     date_name: str = 'date',
     index_cols: Union[int, str, List[int], List[str]] = 0,
     is_sort_index: bool = True,
-    is_drop_duplicates: bool = True,
+    is_drop_duplicates: bool = False,
     is_compress: bool = False,
-    is_cache: bool = True,
+    is_cache: bool = False,
     **kwargs,
 ) -> Union[pd.DataFrame, pd.Series]:
     """

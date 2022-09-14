@@ -9,8 +9,9 @@ setup(
 
     # 你要安装的包，通过 setuptools.find_packages 找到当前目录下有哪些包
     packages=find_packages(),
-    install_requires=['pymongo', 'lz4', 'clickhouse_driver', 'sqlalchemy-clickhouse'],
-    dependency_links=[
-        'https://pypi.tuna.tsinghua.edu.cn/simple',
+    install_requires=[
+        'pymongo',
+        'lz4',
+        'clickhouse_driver',
     ],
 )

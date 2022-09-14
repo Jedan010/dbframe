@@ -30,11 +30,11 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if not os.path.isfile(path):
             mode = 'a'
         super().__init__(
-            path,
-            mode,
-            complevel,
-            complib,
-            fletcher32,
+            path=path,
+            mode=mode,
+            complevel=complevel,
+            complib=complib,
+            fletcher32=fletcher32,
             **kwargs,
         )
         self.mode = mode
@@ -150,7 +150,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         start_idx: int = None,
         stop_idx: int = None,
         is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = True,
+        is_drop_duplicate_index: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -215,7 +215,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         start_idx: int = None,
         stop_idx: int = None,
         is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = True,
+        is_drop_duplicate_index: bool = False,
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
@@ -261,7 +261,7 @@ def read_h5(
     start_idx: int = None,
     stop_idx: int = None,
     is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = True,
+    is_drop_duplicate_index: bool = False,
     is_cache: bool = False,
     **kwargs,
 ) -> pd.DataFrame:
