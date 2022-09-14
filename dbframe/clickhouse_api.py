@@ -79,7 +79,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         symbols: List[str] = None,
         query: List[str] = None,
         date_name: str = 'date',
-        index_col: List[str] = None,
+        index_col: List[str] = 'auto',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = True,
         other_sql: str = None,
@@ -92,16 +92,16 @@ class ClickHouseDB(Client, DatabaseTemplate):
         if table not in self.tables:
             return pd.DataFrame()
 
-        cols: pd.Index = self.get_column_types(table).index
+        col_types = self.get_column_types(table)
+        cols: pd.Index = col_types.index
 
-        if index_col is not None:
-            if isinstance(index_col, (int, str)):
-                index_col = [index_col]
-            index_col = [
-                cols[c] if isinstance(c, int) else c for c in index_col
-            ]
-            index_col = [c for c in index_col if c in cols]
-        else:
+        if col_types.get(date_name) == 'Date':
+            if start:
+                start = pd.to_datetime(start).strftime("%Y-%m-%d")
+            if end:
+                end = pd.to_datetime(end).strftime("%Y-%m-%d")
+
+        if index_col == 'auto':
             try:
                 ddl: str = self.execute(f'show create {table}')[0][0]
                 index_col = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n',
@@ -109,6 +109,14 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 index_col = [x.strip() for x in index_col]
             except Exception as e:
                 pass
+        elif index_col is not None:
+            if isinstance(index_col, (int, str)):
+                index_col = [index_col]
+            index_col = [
+                cols[c] if isinstance(c, int) else c for c in index_col
+            ]
+            index_col = [c for c in index_col if c in cols]
+
         if fields is not None and index_col is not None:
             if isinstance(fields, str):
                 fields = [fields]
@@ -133,7 +141,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         if df.empty:
             return df
 
-        if index_col is not None:
+        if index_col is not None and index_col != 'auto':
             df.set_index(index_col, inplace=True)
             if is_sort_index:
                 df.sort_index(inplace=True)
@@ -152,7 +160,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         symbols: List[str] = None,
         query: List[str] = None,
         date_name: str = 'date',
-        index_col: List[str] = None,
+        index_col: List[str] = 'auto',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = True,
         other_sql: str = None,
@@ -277,6 +285,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         if df.empty:
             return 0
+
+        if isinstance(df, pd.Series):
+            df = df.to_frame()
 
         for col in df.select_dtypes([bool]):
             df[col] = df[col].astype('uint8')

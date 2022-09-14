@@ -20,6 +20,7 @@ class MysqlDB(DatabaseTemplate):
     """
     Mysql 数据库
     """
+
     def __init__(
         self,
         url: str = None,
@@ -57,7 +58,7 @@ class MysqlDB(DatabaseTemplate):
         symbols: Tuple[str] = None,
         query: Tuple[str] = None,
         date_name: str = 'date',
-        index_col: Tuple[str] = [0, 1],
+        index_col: Tuple[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
@@ -128,7 +129,7 @@ class MysqlDB(DatabaseTemplate):
         symbols: Tuple[str] = None,
         query: Tuple[str] = None,
         date_name: str = 'date',
-        index_col: Tuple[str] = 0,
+        index_col: Tuple[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
@@ -166,6 +167,7 @@ class MysqlDB(DatabaseTemplate):
         mode: str = 'insert',
         if_exists: str = 'append',
         index: bool = False,
+        is_drop_duplicate_index: bool = False,
         **kwargs,
     ) -> bool:
         """
@@ -175,7 +177,9 @@ class MysqlDB(DatabaseTemplate):
             return False
 
         if df.index.names[0] is not None:
-            df = df.sort_index().pipe(lambda x: x.loc[~x.index.duplicated()])
+            df = df.sort_index()
+            if is_drop_duplicate_index:
+                df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
 
         if mode == 'update' and df.index.names[
                 0] is not None and table in self.engine.table_names():
@@ -205,11 +209,13 @@ class MysqlDB(DatabaseTemplate):
         if df.index.names[0] is not None:
             df = df.reset_index()
 
-        df.to_sql(table,
-                  self.engine,
-                  if_exists=if_exists,
-                  index=index,
-                  **kwargs)
+        df.to_sql(
+            table,
+            self.engine,
+            if_exists=if_exists,
+            index=index,
+            **kwargs,
+        )
 
         return True
 
@@ -230,7 +236,7 @@ def read_sql(
     symbols: Tuple[str] = None,
     query: Tuple[str] = None,
     date_name: str = 'date',
-    index_col: Tuple[str] = 0,
+    index_col: Tuple[str] = None,
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
     other_sql: str = None,
@@ -266,6 +272,7 @@ def save_sql(
     mode: str = 'insert',
     if_exists: str = 'append',
     index: bool = False,
+    is_drop_duplicate_index: bool = False,
     **kwargs,
 ) -> bool:
     """
@@ -277,5 +284,6 @@ def save_sql(
         mode=mode,
         if_exists=if_exists,
         index=index,
+        is_drop_duplicate_index=is_drop_duplicate_index,
         **kwargs,
     )
