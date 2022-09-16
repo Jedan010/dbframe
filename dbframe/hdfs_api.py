@@ -1,6 +1,6 @@
 import os
 from functools import wraps
-from typing import List, Tuple
+from typing import List, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -47,8 +47,11 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         names = [
             'select',
             'append',
+            'put',
+            'get',
             'remove',
             '__contains__',
+            '__delitem__',
             'info',
             'keys',
             'save_df',
@@ -62,11 +65,17 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
     def _safe_operation(self, func):
         @wraps(func)
         def decorated(*args, **kwargs):
+            if func.__name__ in [
+                    'append',
+                    'save_df',
+                    'remove',
+                    '__delitem__',
+                    'put',
+            ]:
+                self.mode = 'a'
             mode = self.mode
-            if func.__name__ in ['append', 'save_df']:
-                mode = 'a'
-            self.open(mode=mode)
             try:
+                self.open(mode=mode)
                 res = func(*args, **kwargs)
             except Exception as e:
                 raise e
@@ -81,10 +90,13 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         df: pd.DataFrame,
         table: str,
         mode: str = 'insert',
-        format: str = 'table',
-        complib=None,
+        format: Literal['table', 'fixed'] = 'table',
+        complib: Literal['zlib', 'lzo', 'bzip2', 'blosc', 'blosc:lz4',
+                         'blosc:lz4hc'] = None,
         complevel: int = None,
         date_name: str = 'date',
+        chunksize: int = 1e6,
+        is_match_dtype: bool = True,
         **kwargs,
     ) -> bool:
         """
@@ -93,12 +105,24 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if df.empty:
             return False
 
-        if df.index.names[0] is not None:
-            df = df.sort_index().pipe(lambda x: x.loc[~x.index.duplicated()])
+        if format == "fixed":
+            self.put(key=table, value=df, format=format, **kwargs)
+            return True
+
+        if is_match_dtype and self.__contains__(table):
+            try:
+                _df = self.select(table, start=-1)
+                for c, d in _df.dtypes.iteritems():
+                    if c in df:
+                        df[c] = df[c].astype(d)
+            except:
+                pass
 
         if mode == 'update' and df.index.names[
                 0] is not None and self.__contains__(table):
             try:
+                df = df.sort_index()
+                df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
                 idx = df.index
                 if isinstance(idx, pd.MultiIndex):
                     query_del = []
@@ -114,27 +138,45 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
                             )
                 else:
                     query_del = [f'index in {_list2str(idx.astype(str))}']
+                df_copy = df.copy()
+                try:
+                    _df_store: pd.DataFrame = self.select(table, where=query_del)
+                    if not _df_store.empty:
+                        _df_store = _df_store.sort_index().pipe(
+                            lambda x: x.loc[~x.index.duplicated()])
+                        _idx = _df_store.reindex(
+                            _df_store.index.difference(idx)).index
+                        df = pd.concat([_df_store.reindex(_idx), df]).sort_index()
 
-                _df_store: pd.DataFrame = self.select(table, where=query_del)
-                if not _df_store.empty:
-                    _df_store = _df_store.sort_index().pipe(
-                        lambda x: x.loc[~x.index.duplicated()])
-                    _idx = _df_store.reindex(
-                        _df_store.index.difference(idx)).index
-                    df = df.append(_df_store.reindex(_idx)).sort_index()
-
-                    self.remove(table, where=query_del)
+                        self.remove(table, where=query_del)
+                except ValueError:
+                    df = df_copy
             except NotImplementedError:
                 pass
 
-        self.append(
-            key=table,
-            value=df,
-            format=format,
-            complib=complib,
-            complevel=complevel,
-            **kwargs,
-        )
+        if chunksize is None:
+            self.append(
+                key=table,
+                value=df,
+                format=format,
+                complib=complib,
+                complevel=complevel,
+                **kwargs,
+            )
+        else:
+            n = int(np.ceil(len(df) / chunksize))
+            for i in range(n):
+                _ista = int(i * chunksize)
+                _iend = int((i + 1) * chunksize)
+                _df = df.iloc[_ista:_iend]
+                self.append(
+                    key=table,
+                    value=_df,
+                    format=format,
+                    complib=complib,
+                    complevel=complevel,
+                    **kwargs,
+                )
 
         return True
 
@@ -149,6 +191,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         date_name: str = 'date',
         start_idx: int = None,
         stop_idx: int = None,
+        index_cols: List[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         **kwargs,
@@ -214,6 +257,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         date_name: str = 'date',
         start_idx: int = None,
         stop_idx: int = None,
+        index_cols: List[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         is_cache: bool = False,
@@ -236,6 +280,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             date_name=date_name,
             start_idx=start_idx,
             stop_idx=stop_idx,
+            index_cols=index_cols,
             is_sort_index=is_sort_index,
             is_drop_duplicate_index=is_drop_duplicate_index,
             **kwargs,
