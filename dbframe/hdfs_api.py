@@ -97,6 +97,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         date_name: str = 'date',
         chunksize: int = 1e6,
         is_match_dtype: bool = True,
+        is_drop_duplicate_index:bool=False, 
         **kwargs,
     ) -> bool:
         """
@@ -118,11 +119,13 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             except:
                 pass
 
+        df = df.sort_index()
+        if is_drop_duplicate_index:
+            df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
+
         if mode == 'update' and df.index.names[
                 0] is not None and self.__contains__(table):
-            try:
-                df = df.sort_index()
-                df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
+            try:       
                 idx = df.index
                 if isinstance(idx, pd.MultiIndex):
                     query_del = []
@@ -222,6 +225,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if symbols is not None:
             if isinstance(symbols, str):
                 symbols = [symbols]
+            symbols = list(symbols)
             symbol_name = 'symbol'
             if not isinstance(_df.index,
                               pd.MultiIndex) and _df.index.name == symbol_name:
