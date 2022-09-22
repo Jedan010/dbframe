@@ -1,4 +1,5 @@
 from typing import List
+import pandas as pd
 
 
 def gen_sql(
@@ -23,6 +24,11 @@ def gen_sql(
     if start:
         query.append(f"{date_name} >= '{start}'")
     if end:
+        if date_name == 'datetime':
+            _end = pd.to_datetime(end)
+            if _end.hour == _end.minute == _end.second == 0:
+                end = _end.to_period("D").end_time.replace(microsecond=0,
+                                                           nanosecond=0)
         query.append(f"{date_name} <= '{end}'")
     if symbols is not None:
         if isinstance(symbols, str):
@@ -38,7 +44,7 @@ def gen_sql(
         fields = ""
     other_sql = other_sql if other_sql else ""
     op_format = f"FORMAT {op_format}" if op_format else ""
-    
+
     SQL = f"""
         {oper} {fields}
         FROM {table}
