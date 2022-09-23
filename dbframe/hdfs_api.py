@@ -18,6 +18,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
     """
     操作更安全的 HDFS 数据库
     """
+
     def __init__(
         self,
         path,
@@ -63,6 +64,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             setattr(self, name, func_decorated)
 
     def _safe_operation(self, func):
+
         @wraps(func)
         def decorated(*args, **kwargs):
             if func.__name__ in [
@@ -97,7 +99,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         date_name: str = 'date',
         chunksize: int = 1e6,
         is_match_dtype: bool = True,
-        is_drop_duplicate_index:bool=False, 
+        is_drop_duplicate_index: bool = False,
         **kwargs,
     ) -> bool:
         """
@@ -125,7 +127,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
 
         if mode == 'update' and df.index.names[
                 0] is not None and self.__contains__(table):
-            try:       
+            try:
                 idx = df.index
                 if isinstance(idx, pd.MultiIndex):
                     query_del = []
@@ -143,13 +145,15 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
                     query_del = [f'index in {_list2str(idx.astype(str))}']
                 df_copy = df.copy()
                 try:
-                    _df_store: pd.DataFrame = self.select(table, where=query_del)
+                    _df_store: pd.DataFrame = self.select(table,
+                                                          where=query_del)
                     if not _df_store.empty:
                         _df_store = _df_store.sort_index().pipe(
                             lambda x: x.loc[~x.index.duplicated()])
                         _idx = _df_store.reindex(
                             _df_store.index.difference(idx)).index
-                        df = pd.concat([_df_store.reindex(_idx), df]).sort_index()
+                        df = pd.concat([_df_store.reindex(_idx),
+                                        df]).sort_index()
 
                         self.remove(table, where=query_del)
                 except ValueError:
@@ -205,6 +209,15 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
 
         if not self.__contains__(table):
             return pd.DataFrame()
+
+        if (start is None and end is None and fields is None
+                and symbols is None and query is None):
+            return self.select(
+                key=table,
+                start=start_idx,
+                stop=stop_idx,
+                **kwargs,
+            )
 
         where = query
         if query is None:
