@@ -322,6 +322,13 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return self.insert_dataframe(f"INSERT INTO {table} VALUES", df)
 
+    def remove(self, table:str, query:str):
+        """删除数据"""
+        return self.execute(f"""
+            ALTER TABLE {table}
+            DELETE WHERE {query}
+        """)
+
     def get_table_ddl(self, table: str):
         ddl = self.execute(f"show create {table}")[0][0]
         return ddl
