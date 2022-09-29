@@ -113,6 +113,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                                        ddl)[0].split(',')
                 index_col = [x.strip() for x in index_col]
             except Exception as e:
+                index_col = None
                 pass
         elif index_col is not None:
             if isinstance(index_col, (int, str)):
@@ -122,7 +123,13 @@ class ClickHouseDB(Client, DatabaseTemplate):
             ]
             index_col = [c for c in index_col if c in cols]
 
-        if fields is not None and index_col is not None:
+        if 'columns' in kwargs:
+            _columns = kwargs.get('columns')
+            del kwargs['columns']
+            if fields is None:
+                fields = _columns
+
+        if fields is not None and index_col is not None and index_col != 'auto':
             if isinstance(fields, str):
                 fields = [fields]
             fields: pd.Index = pd.Index(fields)
@@ -145,6 +152,43 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         if df.empty:
             return df
+
+        MAPPING = {
+            'String': 'object',
+            'UInt64': 'uint64',
+            'UInt32': 'uint32',
+            'UInt16': 'uint16',
+            'UInt8': 'uint8',
+            'Float64': 'float64',
+            'Float32': 'float32',
+            'Int64': 'int64',
+            'Int32': 'int32',
+            'Int16': 'int16',
+            'Int8': 'int8',
+            'Date': 'datetime64[D]',
+            'DateTime': 'datetime64[ns]',
+            'Nullable(String)': 'object',
+            'Nullable(UInt64)': 'uint64',
+            'Nullable(UInt32)': 'uint32',
+            'Nullable(UInt16)': 'uint16',
+            'Nullable(UInt8)': 'uint8',
+            'Nullable(Float64)': 'float64',
+            'Nullable(Float32)': 'float32',
+            'Nullable(Int64)': 'int64',
+            'Nullable(Int32)': 'int32',
+            'Nullable(Int16)': 'int16',
+            'Nullable(Int8)': 'int8',
+            'Nullable(Date)': 'datetime64[D]',
+            'Nullable(DateTime)': 'datetime64[ns]',
+        }
+
+        data_types = self.get_column_types(table)
+        for col in df:
+            if col not in data_types:
+                continue
+            if not data_types[col] in MAPPING:
+                continue
+            df[col] = df[col].astype(MAPPING[data_types[col]])
 
         if index_col is not None and index_col != 'auto':
             df.set_index(index_col, inplace=True)
@@ -322,7 +366,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return self.insert_dataframe(f"INSERT INTO {table} VALUES", df)
 
-    def remove(self, table:str, query:str):
+    def remove(self, table: str, query: str):
         """删除数据"""
         return self.execute(f"""
             ALTER TABLE {table}
