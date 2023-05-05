@@ -16,7 +16,7 @@ from dbframe.utility import gen_sql
 
 class ClickHouseDB(Client, DatabaseTemplate):
     """
-    ClickHouse 数据库
+    ClickHouse 数据库操作类 
     """
 
     cls_dict = {}
@@ -36,6 +36,47 @@ class ClickHouseDB(Client, DatabaseTemplate):
         *args,
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+        url : URL, optional
+            数据库 URL 地址, by default None
+        host : str, optional
+            数据库地址, by default None
+        database : str, optional
+            数据库名称, by default None
+        user : str, optional
+            用户名, by default None
+        password : str, optional
+            密码, by default None
+        http_port : int, optional
+            http 端口, by default None
+        tcp_port : int, optional
+            tcp 端口, by default 9000
+        compression : bool, optional
+            是否压缩, by default False
+        settings : dict, optional
+            设置, by default {'use_numpy': True}
+        cache_size : int, optional
+            缓存大小, by default CACHE_SIZE
+        
+        Examples
+        --------
+        >>> from dbframe import ClickHouseDB
+        >>> chdb = ClickHouseDB(
+        >>>     host='localhost',
+        >>>     database='default',
+        >>>     user='default',
+        >>>     password='',
+        >>>     http_port=8123,
+        >>>     tcp_port=9000,
+        >>>     compression=False,
+        >>>     settings={'use_numpy': True},
+        >>> )
+        >>> chdb.read_df('table_name')
+        >>> chdb.save_df(df, 'table_name')
+        """
+
         if isinstance(url, str):
             url = URL(url)
 
@@ -107,6 +148,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         return [x[0] for x in self.execute("show databases")]
 
     def get_column_types(self, table: str) -> pd.Series:
+        """获取表的列类型"""
         df = self.query_dataframe(f"desc {table}")
         if df.empty:
             return df
@@ -261,6 +303,59 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
+        """
+        读取 clickhouse 数据库数据, 转化为 dataframe 的格式
+
+        Parameters
+        ----------
+        table : str
+            表名
+        start : str, optional
+            开始日期, by default None
+        end : str, optional
+            结束日期, by default None
+        fields : List[str], optional
+            字段名, by default None
+        symbols : List[str], optional
+            代码列表, by default None
+        query : List[str], optional
+            查询语句, by default None
+        date_name : str, optional
+            日期字段名, by default None
+        index_col : List[str], optional
+            索引字段名, by default 'auto'
+        is_sort_index : bool, optional
+            是否按索引排序, by default True
+        is_drop_duplicate_index : bool, optional
+            是否删除重复索引, by default False
+        other_sql : str, optional
+            其他 sql 语句, by default None
+        op_format : str, optional
+            输出格式, by default 'TabSeparatedWithNamesAndTypes'
+        is_cache : bool, optional
+            是否缓存, by default False
+        
+        Returns
+        -------
+        pd.DataFrame
+            dataframe 格式数据
+        
+        Examples
+        --------
+        >>> from dbframe import ClickHouseDB
+        >>> chdb = ClickHouseDB(
+        >>>     host='localhost',
+        >>>     database='default',
+        >>>     user='default',
+        >>>     password='',
+        >>>     http_port=8123,
+        >>>     tcp_port=9000,
+        >>>     compression=False,
+        >>>     settings={'use_numpy': True},
+        >>> )
+        >>> chdb.read_df('table_name')
+      
+        """
         if is_cache:
             func = self._read_df_cache
         else:
@@ -375,6 +470,53 @@ class ClickHouseDB(Client, DatabaseTemplate):
         compress_level: int = 9,
         is_drop_duplicate_index: bool = False,
     ) -> int:
+        """
+        保存 dataframe 数据至 clickhouse 数据库
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            dataframe 数据
+        table : str
+            表名
+        is_partition : bool, optional
+            是否分区, by default False
+        date_name : str, optional
+            日期字段名, by default None
+        is_compress : bool, optional
+            是否压缩, by default False
+        compress_type : str, optional
+            压缩类型, by default 'LZ4HC'
+        compress_level : int, optional
+            压缩等级, by default 9
+        is_drop_duplicate_index : bool, optional
+            是否删除重复索引, by default False
+        
+        Returns
+        -------
+        int
+            插入的数据条数
+        
+        Examples
+        --------
+        >>> from dbframe import ClickHouseDB
+        >>> chdb = ClickHouseDB(
+        >>>     host='localhost',
+        >>>     database='default',
+        >>>     user='default',
+        >>>     password='',
+        >>>     http_port=8123,
+        >>>     tcp_port=9000,
+        >>>     compression=False,
+        >>>     settings={'use_numpy': True},
+        >>> )
+        >>> chdb.save_df(df, 'table_name')
+
+        Notes
+        -----
+        1. 如果表不存在, 则会自动创建表
+        2. 如果表存在, 则会自动转换 dataframe 数据类型与表内类型一致       
+        """
 
         if df.empty:
             return 0
@@ -422,7 +564,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
         return ddl
 
     def __hash__(self) -> int:
-        return hash((self._host, self._tcp_port, self._database))
+        return hash((self._host, self._tcp_port, self._database, self._user,
+                     self._password))
 
     def get_latest_data(
         self,
@@ -431,7 +574,23 @@ class ClickHouseDB(Client, DatabaseTemplate):
         limit_num: int = 1,
         **kwargs,
     ):
-        """获取最近的数据"""
+        """
+        获取最近更新的数据
+
+        Parameters
+        ----------
+        table : str
+            表名
+        order_by : list[str], optional
+            排序字段, by default 'auto'
+        limit_num : int, optional
+            获取数据条数, by default 1
+
+        Returns
+        -------
+        pd.DataFrame
+            dataframe 格式数据
+        """
         if order_by == 'auto':
             ddl: str = self.execute(f'show create {table}')[0][0]
             order_by_str = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n', ddl)[0]
@@ -451,7 +610,27 @@ class ClickHouseDB(Client, DatabaseTemplate):
         fields: list[str] = [],
         **kwargs,
     ) -> pd.Timestamp:
-        """取最近更新的日期数据"""
+        """
+        取最近更新数据的日期
+
+        Parameters
+        ----------
+        table : str
+            表名
+        order_by : list[str], optional
+            排序字段, by default 'auto'
+        limit_num : int, optional
+            获取数据条数, by default 1
+        date_name : str, optional
+            日期字段名, by default None
+        fields : list[str], optional
+            字段名, by default []    
+
+        Returns
+        -------
+        pd.Timestamp
+            最近更新数据的日期
+        """
 
         col_types = self.get_column_types(table)
         if date_name is None:
@@ -469,10 +648,26 @@ class ClickHouseDB(Client, DatabaseTemplate):
             **kwargs,
         ).index[0]
 
-    def get_all_last_date(self,
-                          tables: list[str] = None,
-                          filter_date: str = None):
-        """获取所有表的最后更新日期"""
+    def get_all_last_date(
+        self,
+        tables: list[str] = None,
+        filter_date: str = None,
+    ):
+        """
+        获取所有表的最后更新日期
+
+        Parameters
+        ----------
+        tables : list[str], optional
+            表名列表, by default None
+        filter_date : str, optional
+            过滤日期, by default None
+        
+        Returns
+        -------
+        pd.Series
+            最后更新日期
+        """
         if tables is None:
             tables = [t for t in self.tables if not t.startswith('_')]
         if isinstance(tables, str):
@@ -495,7 +690,46 @@ class ClickHouseDB(Client, DatabaseTemplate):
         end_date: str = None,
         **kwargs,
     ):
-        """从数据库中的多个表读取数据"""
+        """
+        从数据库中的多个表读取数据
+
+        Parameters
+        ----------
+        table_fields : dict[str, list[str]]
+            表名与字段名的字典
+        start_date : str, optional
+            开始日期, by default None
+        end_date : str, optional
+            结束日期, by default None
+        
+        Returns
+        -------
+        pd.DataFrame
+            dataframe 格式数据
+        
+        Examples
+        --------
+        >>> from dbframe import ClickHouseDB
+        >>> chdb = ClickHouseDB(
+        >>>     host='localhost',
+        >>>     database='default',
+        >>>     user='default',
+        >>>     password='',
+        >>>     http_port=8123,
+        >>>     tcp_port=9000,
+        >>>     compression=False,
+        >>>     settings={'use_numpy': True},
+        >>> )
+        >>> df = chdb.read_df_multi({'table1': ['field1', 'field2'], 
+        >>>             'table2': ['field1', 'field2']})
+        >>> df2 = chdb.read_df_multi({'table1': None,
+        >>>             'table2': ['field1', 'field2']})
+
+        Notes
+        -----
+        1. 读取多个表的数据, 并将数据以outer方式合并为一个 dataframe        
+        """
+
         df = pd.DataFrame()
         if isinstance(table_fields, list):
             table_fields = {table: None for table in table_fields}
@@ -517,6 +751,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
     @classmethod
     def from_url(cls, url):
+        """从 url 创建 ClickHouseDB 对象"""
         if url not in ClickHouseDB.cls_dict:
             ClickHouseDB.cls_dict[url] = super().from_url(url)
         return ClickHouseDB.cls_dict.get(url)
