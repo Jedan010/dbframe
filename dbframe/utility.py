@@ -2,6 +2,10 @@ from typing import List
 import pandas as pd
 
 
+def _list2str(lst: List[str]):
+    return str(tuple(lst)).replace(",)", ")")
+
+
 def gen_sql(
     table: str,
     start: str = None,
@@ -33,7 +37,7 @@ def gen_sql(
     if symbols is not None:
         if isinstance(symbols, str):
             symbols = [symbols]
-        symbols_str = str(tuple(symbols)).replace(",)", ")")
+        symbols_str = _list2str(symbols)
         query.append(f"symbol in {symbols_str}")
     if fields is None:
         fields = '*'

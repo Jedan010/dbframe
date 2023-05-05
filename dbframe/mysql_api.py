@@ -1,19 +1,14 @@
-from typing import List, Tuple
+from typing import Tuple
 
-import numpy as np
 import pandas as pd
+import numpy as np
 from sqlalchemy import create_engine
-from sqlalchemy.engine.base import Engine
 from sqlalchemy.engine.url import URL
 
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
 from dbframe.utility import gen_sql
-
-
-def _list2str(lst: List[str]):
-    return str(tuple(lst)).replace(",)", ")")
 
 
 class MysqlDB(DatabaseTemplate):
@@ -112,6 +107,7 @@ class MysqlDB(DatabaseTemplate):
         if df.empty:
             return df
 
+        df = df.replace(['None'], np.nan)
         if index_col is not None:
             if is_sort_index:
                 df.sort_index(inplace=True)
@@ -136,7 +132,7 @@ class MysqlDB(DatabaseTemplate):
         op_format: str = None,
         is_cache: bool = False,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         """
         读取 mysql 数据 
         """
@@ -181,30 +177,30 @@ class MysqlDB(DatabaseTemplate):
             if is_drop_duplicate_index:
                 df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
 
-        if mode == 'update' and df.index.names[
-                0] is not None and table in self.engine.table_names():
+        # if mode == 'update' and df.index.names[
+        #         0] is not None and table in self.engine.table_names():
 
-            idx = df.index
-            if isinstance(idx, pd.MultiIndex):
-                query_del = [
-                    f"{name} in {_list2str(idx.levels[i].astype(str))}"
-                    for i, name in enumerate(idx.names)
-                ]
-            else:
-                query_del = [f"{idx.name} in {_list2str(idx.astype(str))}"]
+        #     idx = df.index
+        #     if isinstance(idx, pd.MultiIndex):
+        #         query_del = [
+        #             f"{name} in {_list2str(idx.levels[i].astype(str))}"
+        #             for i, name in enumerate(idx.names)
+        #         ]
+        #     else:
+        #         query_del = [f"{idx.name} in {_list2str(idx.astype(str))}"]
 
-            _df_store: pd.DataFrame = self._read_df(engine=self.engine,
-                                                    table=table,
-                                                    query=query_del,
-                                                    index_col=idx.names)
-            if not _df_store.empty:
-                _df_store = _df_store.sort_index().pipe(
-                    lambda x: x.loc[~x.index.duplicated()])
-                _idx = _df_store.reindex(_df_store.index.difference(idx)).index
-                df = df.append(_df_store.reindex(_idx)).sort_index()
+        #     _df_store: pd.DataFrame = self._read_df(engine=self.engine,
+        #                                             table=table,
+        #                                             query=query_del,
+        #                                             index_col=idx.names)
+        #     if not _df_store.empty:
+        #         _df_store = _df_store.sort_index().pipe(
+        #             lambda x: x.loc[~x.index.duplicated()])
+        #         _idx = _df_store.reindex(_df_store.index.difference(idx)).index
+        #         df = df.append(_df_store.reindex(_idx)).sort_index()
 
-                sql_del = gen_sql(table, query=query_del, oper='DELETE')
-                self.engine.execute(sql_del)
+        #         sql_del = gen_sql(table, query=query_del, oper='DELETE')
+        #         self.engine.execute(sql_del)
 
         if df.index.names[0] is not None:
             df = df.reset_index()
@@ -219,9 +215,13 @@ class MysqlDB(DatabaseTemplate):
 
         return True
 
+    def remove(self, table: str, query: str):
+        """删除数据"""
+        return self.engine.execute(f"DELETE FROM {table} WHERE {query}")
+
     @property
     def tables(self):
-        return [x[0] for x in self.engine.execute("show tables").fetchall()]
+        return self.engine.table_names()
 
     def __hash__(self) -> int:
         return hash(self.url)

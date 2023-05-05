@@ -14,7 +14,8 @@ from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
 
-lz4_compressHC = lambda _str: lz4_compress(_str, mode='high_compression')
+def lz4_compressHC(_str):
+    return lz4_compress(_str, mode='high_compression')
 
 INDEX_COLLECTION = 'index'
 # START = 'start'

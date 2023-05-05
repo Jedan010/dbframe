@@ -93,6 +93,7 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         table: str,
         mode: str = 'insert',
         format: Literal['table', 'fixed'] = 'table',
+        data_columns: list[str] = True,
         complib: Literal['zlib', 'lzo', 'bzip2', 'blosc', 'blosc:lz4',
                          'blosc:lz4hc'] = None,
         complevel: int = None,
@@ -109,7 +110,11 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             return False
 
         if format == "fixed":
-            self.put(key=table, value=df, format=format, **kwargs)
+            self.put(key=table,
+                     value=df,
+                     format=format,
+                     data_columns=data_columns,
+                     **kwargs)
             return True
 
         if is_match_dtype and self.__contains__(table):
@@ -118,54 +123,55 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
                 for c, d in _df.dtypes.iteritems():
                     if c in df:
                         df[c] = df[c].astype(d)
-            except:
+            except Exception:
                 pass
 
         df = df.sort_index()
         if is_drop_duplicate_index:
             df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
 
-        if mode == 'update' and df.index.names[
-                0] is not None and self.__contains__(table):
-            try:
-                idx = df.index
-                if isinstance(idx, pd.MultiIndex):
-                    query_del = []
-                    for i, name in enumerate(idx.names):
-                        if name == date_name:
-                            query_del.append(
-                                f"{name} >= '{idx.levels[i].min()}'")
-                            query_del.append(
-                                f"{name} <= '{idx.levels[i].max()}'")
-                        else:
-                            query_del.append(
-                                f"{name} in {_list2str(idx.levels[i].astype(str))}"
-                            )
-                else:
-                    query_del = [f'index in {_list2str(idx.astype(str))}']
-                df_copy = df.copy()
-                try:
-                    _df_store: pd.DataFrame = self.select(table,
-                                                          where=query_del)
-                    if not _df_store.empty:
-                        _df_store = _df_store.sort_index().pipe(
-                            lambda x: x.loc[~x.index.duplicated()])
-                        _idx = _df_store.reindex(
-                            _df_store.index.difference(idx)).index
-                        df = pd.concat([_df_store.reindex(_idx),
-                                        df]).sort_index()
+        # if mode == 'update' and df.index.names[
+        #         0] is not None and self.__contains__(table):
+        #     try:
+        #         idx = df.index
+        #         if isinstance(idx, pd.MultiIndex):
+        #             query_del = []
+        #             for i, name in enumerate(idx.names):
+        #                 if name == date_name:
+        #                     query_del.append(
+        #                         f"{name} >= '{idx.levels[i].min()}'")
+        #                     query_del.append(
+        #                         f"{name} <= '{idx.levels[i].max()}'")
+        #                 else:
+        #                     query_del.append(
+        #                         f"{name} in {_list2str(idx.levels[i].astype(str))}"
+        #                     )
+        #         else:
+        #             query_del = [f'index in {_list2str(idx.astype(str))}']
+        #         df_copy = df.copy()
+        #         try:
+        #             _df_store: pd.DataFrame = self.select(table,
+        #                                                   where=query_del)
+        #             if not _df_store.empty:
+        #                 _df_store = _df_store.sort_index().pipe(
+        #                     lambda x: x.loc[~x.index.duplicated()])
+        #                 _idx = _df_store.reindex(
+        #                     _df_store.index.difference(idx)).index
+        #                 df = pd.concat([_df_store.reindex(_idx),
+        #                                 df]).sort_index()
 
-                        self.remove(table, where=query_del)
-                except ValueError:
-                    df = df_copy
-            except NotImplementedError:
-                pass
+        #                 self.remove(table, where=query_del)
+        #         except ValueError:
+        #             df = df_copy
+        #     except NotImplementedError:
+        #         pass
 
         if chunksize is None:
             self.append(
                 key=table,
                 value=df,
                 format=format,
+                data_columns=data_columns,
                 complib=complib,
                 complevel=complevel,
                 **kwargs,

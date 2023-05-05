@@ -1,11 +1,12 @@
-from logging import warning
 import re
+from logging import warning
 from typing import List
 
 import numpy as np
 import pandas as pd
 from clickhouse_driver import Client
 from sqlalchemy import create_engine
+from sqlalchemy.engine.url import URL
 
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
@@ -22,38 +23,75 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
     def __init__(
         self,
-        host: str = 'localhost',
-        database: str = 'default',
-        user: str = 'default',
-        password: str = "",
+        url: URL = None,
+        host: str = None,
+        database: str = None,
+        user: str = None,
+        password: str = None,
+        http_port: int = None,
         tcp_port: int = 9000,
-        http_port: int = 8123,
         compression: bool = False,
         settings: dict = {'use_numpy': True},
         cache_size: int = CACHE_SIZE,
         *args,
         **kwargs,
     ):
+        if isinstance(url, str):
+            url = URL(url)
+
+        if not host:
+            if url:
+                host = url.host
+            else:
+                host = 'localhost'
+        if not database:
+            if url:
+                database = url.database
+            else:
+                database = 'default'
+        if not user:
+            if url:
+                user = url.username
+            else:
+                user = "default"
+        if not password:
+            if url:
+                password = url.password
+            else:
+                password = ""
+        if not http_port:
+            if url:
+                http_port = url.port
+            else:
+                http_port = 8123
+        drivername: str = 'clickhouse'
+        url = URL(
+            drivername=drivername,
+            host=host,
+            database=database,
+            username=user,
+            password=password,
+            port=http_port,
+        )
+        self._url = url
         self._host = host
         self._database = database
         self._user = user
         self._password = password
-        self._tcp_port = tcp_port
         self._http_port = http_port
+        self._tcp_port = tcp_port
         self._compression = compression
         try:
-            self.engine = create_engine(
-                f"clickhouse://{user}:{password}@{host}:{http_port}/{database}"
-            )
-        except:
+            self.engine = create_engine(self._url)
+        except Exception:
             warning("没有安装 sqlalchemy-clickhouse 库")
 
-        kwargs['host'] = host
-        kwargs['database'] = database
-        kwargs['user'] = user
-        kwargs['password'] = password
-        kwargs['port'] = tcp_port
-        kwargs['compression'] = compression
+        kwargs['host'] = self._host
+        kwargs['database'] = self._database
+        kwargs['user'] = self._user
+        kwargs['password'] = self._password
+        kwargs['port'] = self._tcp_port
+        kwargs['compression'] = self._compression
         kwargs['settings'] = settings
 
         super().__init__(*args, **kwargs)
@@ -83,7 +121,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         fields: List[str] = None,
         symbols: List[str] = None,
         query: List[str] = None,
-        date_name: str = 'date',
+        date_name: str = None,
         index_col: List[str] = 'auto',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -100,6 +138,11 @@ class ClickHouseDB(Client, DatabaseTemplate):
         col_types = self.get_column_types(table)
         cols: pd.Index = col_types.index
 
+        if date_name is None:
+            date_name = 'date'
+            if 'date' not in col_types and 'datetime' in col_types:
+                date_name = 'datetime'
+
         if col_types.get(date_name) == 'Date':
             if start:
                 start = pd.to_datetime(start).strftime("%Y-%m-%d")
@@ -112,7 +155,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 index_col = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n',
                                        ddl)[0].split(',')
                 index_col = [x.strip() for x in index_col]
-            except Exception as e:
+            except Exception:
                 index_col = None
                 pass
         elif index_col is not None:
@@ -182,11 +225,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
             'Nullable(DateTime)': 'datetime64[ns]',
         }
 
+        df = df.replace(['None'], np.nan)
         data_types = self.get_column_types(table)
         for col in df:
             if col not in data_types:
                 continue
-            if not data_types[col] in MAPPING:
+            if data_types[col] not in MAPPING:
                 continue
             df[col] = df[col].astype(MAPPING[data_types[col]])
 
@@ -208,7 +252,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         fields: List[str] = None,
         symbols: List[str] = None,
         query: List[str] = None,
-        date_name: str = 'date',
+        date_name: str = None,
         index_col: List[str] = 'auto',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -317,7 +361,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             'DateTime': np.datetime64,
         }
         table_type = self.get_column_types(table).replace(MAPPING_REVERSE)
-        df = df.apply(lambda x: x.astype(table_type[x.name]))
+        df = df.apply(lambda x: x.astype(table_type[x.name], errors='ignore'))
         return df
 
     def save_df(
@@ -380,6 +424,97 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def __hash__(self) -> int:
         return hash((self._host, self._tcp_port, self._database))
 
+    def get_latest_data(
+        self,
+        table: str,
+        order_by: list[str] = 'auto',
+        limit_num: int = 1,
+        **kwargs,
+    ):
+        """获取最近的数据"""
+        if order_by == 'auto':
+            ddl: str = self.execute(f'show create {table}')[0][0]
+            order_by_str = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n', ddl)[0]
+        elif isinstance(order_by, str):
+            order_by_str = order_by
+        else:
+            order_by_str = ", ".join(order_by)
+        other_sql = f"ORDER BY ({order_by_str}) DESC LIMIT {limit_num}"
+        return self.read_df(table=table, other_sql=other_sql, **kwargs)
+
+    def get_last_date(
+        self,
+        table: str,
+        order_by: list[str] = 'auto',
+        limit_num: int = 1,
+        date_name: str = None,
+        fields: list[str] = [],
+        **kwargs,
+    ) -> pd.Timestamp:
+        """取最近更新的日期数据"""
+
+        col_types = self.get_column_types(table)
+        if date_name is None:
+            date_name = 'date'
+            if 'date' not in col_types and 'datetime' in col_types:
+                date_name = 'datetime'
+
+        return self.get_latest_data(
+            table=table,
+            order_by=order_by,
+            limit_num=limit_num,
+            date_name=date_name,
+            fields=fields,
+            index_col=[date_name],
+            **kwargs,
+        ).index[0]
+
+    def get_all_last_date(self,
+                          tables: list[str] = None,
+                          filter_date: str = None):
+        """获取所有表的最后更新日期"""
+        if tables is None:
+            tables = [t for t in self.tables if not t.startswith('_')]
+        if isinstance(tables, str):
+            tables = [tables]
+        res = {}
+        for table in tables:
+            try:
+                res[table] = self.get_last_date(table)
+            except Exception:
+                pass
+        last_date_df = pd.Series(res).reindex(tables)
+        if filter_date is not None:
+            last_date_df = last_date_df.loc[lambda x: x.lt(filter_date)]
+        return last_date_df
+
+    def read_df_multi(
+        self,
+        table_fields: dict[str, list[str]],
+        start_date: str = None,
+        end_date: str = None,
+        **kwargs,
+    ):
+        """从数据库中的多个表读取数据"""
+        df = pd.DataFrame()
+        if isinstance(table_fields, list):
+            table_fields = {table: None for table in table_fields}
+        for _table, fields in table_fields.items():
+            _df = self.read_df(
+                table=_table,
+                start=start_date,
+                end=end_date,
+                fields=fields,
+                **kwargs,
+            )
+            if _df.empty:
+                continue
+            if df.empty:
+                df = _df
+            else:
+                df = df.join(_df, how='outer')
+        return df
+
     @classmethod
     def from_url(cls, url):
         if url not in ClickHouseDB.cls_dict:
@@ -395,7 +530,7 @@ def read_ch(
     fields: List[str] = None,
     symbols: List[str] = None,
     query: List[str] = None,
-    date_name: str = 'date',
+    date_name: str = None,
     index_col: List[str] = None,
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
