@@ -8,7 +8,7 @@ from sqlalchemy.engine.url import URL
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
-from dbframe.utility import gen_sql, repeat
+from dbframe.utility import repeat
 from pymysql.err import Error as PyMysqlError
 
 
@@ -86,7 +86,7 @@ class MysqlDB(DatabaseTemplate):
         if index_col is not None and not len(index_col):
             index_col = None
 
-        SQL = gen_sql(
+        SQL = self._gen_sql(
             table=table,
             start=start,
             end=end,

@@ -11,7 +11,6 @@ from sqlalchemy.engine.url import URL
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
-from dbframe.utility import gen_sql
 
 
 class ClickHouseDB(Client, DatabaseTemplate):
@@ -240,7 +239,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             fields: pd.Index = pd.Index(fields)
             fields = fields.union(index_col)
 
-        SQL = gen_sql(
+        SQL = self._gen_sql(
             table=table,
             start=start,
             end=end,
