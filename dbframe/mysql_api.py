@@ -8,7 +8,8 @@ from sqlalchemy.engine.url import URL
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
-from dbframe.utility import gen_sql
+from dbframe.utility import gen_sql, repeat
+from pymysql.err import Error as PyMysqlError
 
 
 class MysqlDB(DatabaseTemplate):
@@ -44,6 +45,7 @@ class MysqlDB(DatabaseTemplate):
 
         self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
 
+    @repeat(error_type=PyMysqlError)
     def _read_df(
         self,
         table: str,
