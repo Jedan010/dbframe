@@ -217,9 +217,56 @@ class MysqlDB(DatabaseTemplate):
 
         return True
 
-    def remove(self, table: str, query: str):
+    def remove(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        date_name: str = 'date',
+        query: list[str] = None,
+    ):
         """删除数据"""
+        if query is None and start is None and end is None:
+            raise ValueError("query or start and end must be given")
+
+        if query is None:
+            query = []
+        if isinstance(query, str):
+            query = [query]
+        if start is not None:
+            query.append(f"{date_name} >= '{start}'")
+        if end is not None:
+            query.append(f"{date_name} <= '{end}'")
+        query = ' AND '.join(query)
+
         return self.engine.execute(f"DELETE FROM {table} WHERE {query}")
+
+    def drop_duplicate_date(
+        self,
+        table: str,
+        index_col: list[str],
+        start: str = None,
+        end: str = None,
+        date_name: str = 'date',
+    ):
+        """删除数据库中重复数据"""
+        if start is None and end is None:
+            df = self._read_df(table=table,
+                               index_col=index_col,
+                               is_drop_duplicate_index=True)
+            self.engine.execute(f"DROP TABLE {table}")
+            self.save_df(df=df, table=table)
+
+        else:
+            df = self._read_df(
+                table=table,
+                start=start,
+                end=end,
+                index_col=index_col,
+                is_drop_duplicate_index=True,
+            )
+            self.remove(table=table, start=start, end=end, date_name=date_name)
+            self.save_df(df=df, table=table)
 
     @property
     def tables(self):

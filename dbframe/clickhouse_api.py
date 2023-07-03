@@ -149,11 +149,31 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
     def get_column_types(self, table: str) -> pd.Series:
         """获取表的列类型"""
+        if table not in self.tables:
+            return pd.Series()
         df = self.query_dataframe(f"desc {table}")
         if df.empty:
             return df
         df = df.set_index('name')['type']
         return df
+
+    def get_column_names(
+        self,
+        table: str,
+        exclude_names: list[str] = None,
+    ) -> list[str]:
+        """获取表的列名"""
+        if table not in self.tables:
+            return []
+        df = self.get_column_types(table)
+        names = df.index
+        if df.empty:
+            return names.to_list()
+        if exclude_names is not None:
+            if isinstance(exclude_names, str):
+                exclude_names = [exclude_names]
+            names = names.difference(exclude_names)
+        return names.to_list()
 
     def _read_df(
         self,
@@ -552,8 +572,34 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return self.insert_dataframe(f"INSERT INTO {table} VALUES", df)
 
-    def remove(self, table: str, query: str):
+    def remove(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        date_name: str = None,
+        query: list[str] = None,
+    ):
         """删除数据"""
+        if query is None and start is None and end is None:
+            raise ValueError("query or start and end must be specified")
+
+        col_types = self.get_column_types(table)
+        if date_name is None:
+            date_name = 'date'
+            if 'date' not in col_types and 'datetime' in col_types:
+                date_name = 'datetime'
+
+        if query is None:
+            query = []
+        if isinstance(query, str):
+            query = [query]
+        if start is not None:
+            query.append(f"{date_name} >= '{start}'")
+        if end is not None:
+            query.append(f"{date_name} <= '{end}'")
+        query = ' AND '.join(query)
+
         return self.execute(f"""
             ALTER TABLE {table}
             DELETE WHERE {query}
@@ -688,6 +734,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         table_fields: dict[str, list[str]],
         start_date: str = None,
         end_date: str = None,
+        is_drop_duplicate_index: bool = True,
         **kwargs,
     ):
         """
@@ -739,6 +786,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 start=start_date,
                 end=end_date,
                 fields=fields,
+                is_drop_duplicate_index=is_drop_duplicate_index,
                 **kwargs,
             )
             if _df.empty:
@@ -747,7 +795,32 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 df = _df
             else:
                 df = df.join(_df, how='outer')
+        if is_drop_duplicate_index:
+            df = df.loc[~df.index.duplicated()]
         return df
+
+    def drop_duplicate_data(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        date_name: str = None,
+    ):
+        """删除数据库中重复数据"""
+        if start is None and end is None:
+            df = self.read_df(table=table, is_drop_duplicate_index=True)
+            self.execute(f'drop table if exists {table}')
+            self.save_df(df, table)
+        else:
+            df = self.read_df(
+                table=table,
+                start=start,
+                end=end,
+                date_name=date_name,
+                is_drop_duplicate_index=True,
+            )
+            self.remove(table=table, start=start, end=end, date_name=date_name)
+            self.save_df(df, table)
 
     @classmethod
     def from_url(cls, url):
