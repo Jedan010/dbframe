@@ -229,10 +229,7 @@ class MysqlDB(DatabaseTemplate):
         if query is None and start is None and end is None:
             raise ValueError("query or start and end must be given")
 
-        if query is None:
-            query = []
-        if isinstance(query, str):
-            query = [query]
+        query = self._format_query(query=query)
         if start is not None:
             query.append(f"{date_name} >= '{start}'")
         if end is not None:

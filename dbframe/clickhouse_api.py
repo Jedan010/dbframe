@@ -589,10 +589,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if 'date' not in col_types and 'datetime' in col_types:
                 date_name = 'datetime'
 
-        if query is None:
-            query = []
-        if isinstance(query, str):
-            query = [query]
+        query = self._format_query(query)
         if start is not None:
             query.append(f"{date_name} >= '{start}'")
         if end is not None:

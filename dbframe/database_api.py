@@ -57,6 +57,31 @@ class DatabaseTemplate(ABC):
             lst = [lst]
         return str(tuple(lst)).replace(",)", ")")
 
+    def _format_query(self, query: List[str]) -> list[str]:
+        if query is None:
+            query = []
+        elif isinstance(query, (str, dict, tuple)):
+            query = [query]
+
+        new_query: list[str] = []
+        for x in query:
+            if isinstance(x, str):
+                new_query.append(x)
+            elif isinstance(x, (list, tuple)):
+                if len(x) == 2:
+                    new_query.append(f"{x[0]} in {self._list2str(x[1])}")
+                else:
+                    raise ValueError(
+                        f"query {x} must be a list or tuple with length 2")
+            elif isinstance(x, dict):
+                for k, v in x.items():
+                    new_query.append(f"{k} in {self._list2str(v)}")
+            else:
+                raise ValueError(
+                    f"query {x} must be a str or list or tuple or dict")
+
+        return new_query
+
     def _gen_sql(
         self,
         table: str,
@@ -73,10 +98,7 @@ class DatabaseTemplate(ABC):
         """
         生成 SQL 语句
         """
-        if query is None:
-            query = []
-        elif isinstance(query, str):
-            query = [query]
+        query = self._format_query(query)
         if start:
             query.append(f"{date_name} >= '{start}'")
         if end:
@@ -91,13 +113,16 @@ class DatabaseTemplate(ABC):
                 symbols = [symbols]
             symbols_str = self._list2str(symbols)
             query.append(f"symbol in {symbols_str}")
+
+        where = "WHERE " + " AND ".join(query) if query else ""
+
         if fields is None:
             fields = '*'
         elif not isinstance(fields, str):
             fields = ', '.join(fields)
-        where = "WHERE " + " AND ".join(query) if query else ""
         if oper in ['delete', 'DELETE']:
             fields = ""
+
         other_sql = other_sql if other_sql else ""
         op_format = f"FORMAT {op_format}" if op_format else ""
 
