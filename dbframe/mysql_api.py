@@ -10,6 +10,7 @@ from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
 from dbframe.utility import repeat
 from pymysql.err import Error as PyMysqlError
+from copy import deepcopy
 
 
 class MysqlDB(DatabaseTemplate):
@@ -19,7 +20,7 @@ class MysqlDB(DatabaseTemplate):
 
     def __init__(
         self,
-        url: str = None,
+        url: URL = None,
         host: str = None,
         port: str = None,
         database: str = None,
@@ -27,16 +28,41 @@ class MysqlDB(DatabaseTemplate):
         password: str = None,
     ) -> None:
         if url is None:
+            if host is None:
+                host = 'localhost'
+            if port is None:
+                port = '3306'
+            if database is None:
+                database = 'default'
+            if username is None:
+                username = "root"
+            if password is None:
+                password = ""
             url = URL(
-                'mysql+pymysql',
+                drivername='mysql+pymysql',
                 host=host,
                 port=port,
                 database=database,
                 username=username,
                 password=password,
             )
+        else:
+            if isinstance(url, str):
+                url = URL(url)
+            url = deepcopy(url)
+            if host is not None:
+                url.host = host
+            if port is not None:
+                url.port = port
+            if database is not None:
+                url.database = database
+            if username is not None:
+                url.username = username
+            if password is not None:
+                url.password = password
+
         self.url = url
-        self.engine = create_engine(url)
+        self.engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
         self.host = self.engine.url.host
         self.port = self.engine.url.port
         self.database = self.engine.url.port
@@ -45,7 +71,7 @@ class MysqlDB(DatabaseTemplate):
 
         self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
 
-    @repeat(error_type=PyMysqlError)
+    @repeat(error_type=(PyMysqlError, IOError))
     def _read_df(
         self,
         table: str,

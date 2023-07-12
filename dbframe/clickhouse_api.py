@@ -11,6 +11,7 @@ from sqlalchemy.engine.url import URL
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
+from copy import deepcopy
 
 
 class ClickHouseDB(Client, DatabaseTemplate):
@@ -76,43 +77,40 @@ class ClickHouseDB(Client, DatabaseTemplate):
         >>> chdb.save_df(df, 'table_name')
         """
 
-        if isinstance(url, str):
-            url = URL(url)
-
-        if not host:
-            if url:
-                host = url.host
-            else:
+        if url is None:
+            if host is None:
                 host = 'localhost'
-        if not database:
-            if url:
-                database = url.database
-            else:
+            if database is None:
                 database = 'default'
-        if not user:
-            if url:
-                user = url.username
-            else:
-                user = "default"
-        if not password:
-            if url:
-                password = url.password
-            else:
+            if user is None:
+                user = ""
+            if password is None:
                 password = ""
-        if not http_port:
-            if url:
-                http_port = url.port
-            else:
+            if http_port is None:
                 http_port = 8123
-        drivername: str = 'clickhouse'
-        url = URL(
-            drivername=drivername,
-            host=host,
-            database=database,
-            username=user,
-            password=password,
-            port=http_port,
-        )
+            url = URL(
+                drivername='clickhouse',
+                host=host,
+                database=database,
+                username=user,
+                password=password,
+                port=http_port,
+            )
+        else:
+            if isinstance(url, str):
+                url = URL(url)
+            url = deepcopy(url)
+            if host is not None:
+                url.host = host
+            if database is not None:
+                url.database = database
+            if user is not None:
+                url.username = user
+            if password is not None:
+                url.password = password
+            if http_port is not None:
+                url.port = http_port
+
         self._url = url
         self._host = host
         self._database = database
