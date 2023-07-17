@@ -5,8 +5,9 @@ from typing import List
 import numpy as np
 import pandas as pd
 from clickhouse_driver import Client
+import sqlalchemy
 from sqlalchemy import create_engine
-from sqlalchemy.engine.url import URL
+from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
@@ -30,6 +31,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         password: str = None,
         http_port: int = None,
         tcp_port: int = 9000,
+        query: dict = None,
         compression: bool = False,
         settings: dict = {'use_numpy': True},
         cache_size: int = CACHE_SIZE,
@@ -88,28 +90,62 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 password = ""
             if http_port is None:
                 http_port = 8123
-            url = URL(
-                drivername='clickhouse',
-                host=host,
-                database=database,
-                username=user,
-                password=password,
-                port=http_port,
-            )
+            if query is None:
+                query = {'charset': 'utf8'}
+            if sqlalchemy.__version__ < '1.4':
+                url = URL(
+                    drivername='clickhouse',
+                    host=host,
+                    database=database,
+                    username=user,
+                    password=password,
+                    port=http_port,
+                    query=query,
+                )
+            else:
+                url = URL.create(
+                    drivername='clickhouse',
+                    host=host,
+                    database=database,
+                    username=user,
+                    password=password,
+                    port=http_port,
+                    query=query,
+                )
         else:
             if isinstance(url, str):
-                url = URL(url)
+                url = make_url(url)
             url = deepcopy(url)
             if host is not None:
-                url.host = host
+                if sqlalchemy.__version__ < '1.4':
+                    url.host = host
+                else:
+                    url.set(host=host)
             if database is not None:
-                url.database = database
+                if sqlalchemy.__version__ < '1.4':
+                    url.database = database
+                else:
+                    url.set(database=database)
             if user is not None:
-                url.username = user
+                if sqlalchemy.__version__ < '1.4':
+                    url.username = user
+                else:   
+                    url.set(username=user)               
             if password is not None:
-                url.password = password
+                if sqlalchemy.__version__ < '1.4':
+                    url.password = password
+                else:
+                    url.set(password=password)
             if http_port is not None:
-                url.port = http_port
+                if sqlalchemy.__version__ < '1.4':
+                    url.port = http_port
+                else:
+                    url.set(port=http_port)
+            if query is not None:
+                if sqlalchemy.__version__ < '1.4':
+                    url.query = query
+                else:
+                    url.set(query=query)
 
         self._url = url
         self._host = host
@@ -118,6 +154,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         self._password = password
         self._http_port = http_port
         self._tcp_port = tcp_port
+        self._query = query
         self._compression = compression
         try:
             self.engine = create_engine(self._url)
@@ -177,11 +214,11 @@ class ClickHouseDB(Client, DatabaseTemplate):
         table: str,
         start: str = None,
         end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
+        fields: list[str] = None,
+        symbols: list[str] = None,
+        query: list[str] = None,
         date_name: str = None,
-        index_col: List[str] = 'auto',
+        index_col: list[str] = 'auto',
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
@@ -280,7 +317,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             'Nullable(Int32)': 'int32',
             'Nullable(Int16)': 'int16',
             'Nullable(Int8)': 'int8',
-            'Nullable(Date)': 'datetime64[D]',
+            'Nullable(Date)': 'datetime64[s]',
             'Nullable(DateTime)': 'datetime64[ns]',
         }
 

@@ -2,8 +2,9 @@ from typing import Tuple
 
 import pandas as pd
 import numpy as np
+import sqlalchemy
 from sqlalchemy import create_engine
-from sqlalchemy.engine.url import URL
+from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
@@ -26,6 +27,7 @@ class MysqlDB(DatabaseTemplate):
         database: str = None,
         username: str = None,
         password: str = None,
+        query: dict = None,
     ) -> None:
         if url is None:
             if host is None:
@@ -38,6 +40,8 @@ class MysqlDB(DatabaseTemplate):
                 username = "root"
             if password is None:
                 password = ""
+            if query is None:
+                query = {'charset': 'utf8'}
             url = URL(
                 drivername='mysql+pymysql',
                 host=host,
@@ -45,29 +49,51 @@ class MysqlDB(DatabaseTemplate):
                 database=database,
                 username=username,
                 password=password,
+                query=query,
             )
         else:
             if isinstance(url, str):
-                url = URL(url)
+                url = make_url(url)
             url = deepcopy(url)
             if host is not None:
-                url.host = host
-            if port is not None:
-                url.port = port
+                if sqlalchemy.__version__ < '1.4':
+                    url.host = host
+                else:
+                    url.set(host=host)
             if database is not None:
-                url.database = database
+                if sqlalchemy.__version__ < '1.4':
+                    url.database = database
+                else:
+                    url.set(database=database)
             if username is not None:
-                url.username = username
+                if sqlalchemy.__version__ < '1.4':
+                    url.username = username
+                else:   
+                    url.set(username=username)               
             if password is not None:
-                url.password = password
+                if sqlalchemy.__version__ < '1.4':
+                    url.password = password
+                else:
+                    url.set(password=password)
+            if port is not None:
+                if sqlalchemy.__version__ < '1.4':
+                    url.port = port
+                else:
+                    url.set(port=port)
+            if query is not None:
+                if sqlalchemy.__version__ < '1.4':
+                    url.query = query
+                else:
+                    url.set(query=query)
 
-        self.url = url
+        self._url = url
         self.engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
-        self.host = self.engine.url.host
-        self.port = self.engine.url.port
-        self.database = self.engine.url.port
-        self.username = self.engine.url.username
-        self.password = self.engine.url.password
+        self._host = self.engine.url.host
+        self._port = self.engine.url.port
+        self._database = self.engine.url.port
+        self._username = self.engine.url.username
+        self._password = self.engine.url.password
+        self._query = self.engine.url.query
 
         self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
 
@@ -296,7 +322,7 @@ class MysqlDB(DatabaseTemplate):
         return self.engine.table_names()
 
     def __hash__(self) -> int:
-        return hash(self.url)
+        return hash(self._url)
 
 
 def read_sql(
