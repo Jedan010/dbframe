@@ -209,6 +209,15 @@ class ClickHouseDB(Client, DatabaseTemplate):
             names = names.difference(exclude_names)
         return names.to_list()
 
+    def get_table_columns(self, tables:list[str], exclude_names:list[str]=None) -> dict[str, list[str]]:
+        """获取表的列名"""
+        if isinstance(tables, str):
+            tables = [tables]
+        res = {}
+        for table in tables:
+            res[table] = self.get_column_names(table, exclude_names=exclude_names)
+        return res
+
     def _read_df(
         self,
         table: str,
