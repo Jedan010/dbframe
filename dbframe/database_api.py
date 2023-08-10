@@ -69,6 +69,8 @@ class DatabaseTemplate(ABC):
                 new_query.append(x)
             elif isinstance(x, (list, tuple)):
                 if len(x) == 2:
+                    if x[1] is None:
+                        continue
                     new_query.append(f"{x[0]} in {self._list2str(x[1])}")
                 else:
                     raise ValueError(
