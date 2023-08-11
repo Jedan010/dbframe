@@ -5,7 +5,8 @@ from dbframe.setting import CACHE_SIZE
 import pandas as pd
 from pyarrow.parquet import read_table as read_parquet
 from pyarrow.lib import concat_tables
-
+from typing import Callable
+from copy import deepcopy
 
 class ParquetDB(DatabaseTemplate):
     """
@@ -38,7 +39,8 @@ class ParquetDB(DatabaseTemplate):
         end: str,
         fields: list[str] = None,
         symbols: list[str] = None,
-        query: list[str] = None,
+        query: list[tuple[str,str, str]] = None,
+        date_filter:Callable = None,
         index_col: list[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -47,16 +49,19 @@ class ParquetDB(DatabaseTemplate):
         """
         读取 parquet 数据
         """
-        paths = [os.path.join(self.base_dir, path) for path in self._file_df[start:end]]
-        if not paths:
+        files:pd.Series = self._file_df.loc[start:end]
+        if files.empty:
             return pd.DataFrame()
+
+        if query is None:
+            query = []
+        if isinstance(query, str):
+            query = [query]
 
         if symbols is not None:
             if isinstance(symbols, str):
                 symbols = [symbols]
-            if query is None:
-                query = []
-            query.append(["symbol", "in", symbols])
+            query.append(("symbol", "in", symbols))
 
         if fields is not None:
             if isinstance(fields, str):
@@ -66,13 +71,23 @@ class ParquetDB(DatabaseTemplate):
                     index_col = [index_col]
                 fields = pd.Index(fields).union(index_col, sort=False).tolist()
 
-        table = concat_tables(
-            [
-                read_parquet(path, columns=fields, filters=query, **kwargs)
-                for path in paths
-            ]
-        )
-        df: pd.DataFrame = table.to_pandas()
+        tables = []
+        for date, file_name in files.items():
+            path = os.path.join(self.base_dir, file_name)
+            filters = deepcopy(query)
+            if date_filter is not None and callable(date_filter):
+                _filter = date_filter(date)
+                if isinstance(_filter, tuple):
+                    filters.append(_filter)
+                elif isinstance(_filter, list):
+                    filters.extend(_filter)
+            if len(filters) == 0:
+                filters = None
+            table = read_parquet(path, columns=fields, filters=filters, **kwargs)
+            tables.append(table)    
+
+        py_table = concat_tables(tables)
+        df: pd.DataFrame = py_table.to_pandas()
 
         if index_col is not None:
             df = df.set_index(index_col)
