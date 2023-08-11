@@ -333,7 +333,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if isinstance(fields, str):
                 fields = [fields]
             fields: pd.Index = pd.Index(fields)
-            fields = fields.union(index_col)
+            fields = fields.union(index_col, sort=False)
 
         SQL = self._gen_sql(
             table=table,

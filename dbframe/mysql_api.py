@@ -134,7 +134,7 @@ class MysqlDB(DatabaseTemplate):
             if isinstance(fields, str):
                 fields = [fields]
             fields: pd.Index = pd.Index(fields)
-            fields = fields.union(index_col)
+            fields = fields.union(index_col, sort=False)
         if index_col is not None and not len(index_col):
             index_col = None
 
