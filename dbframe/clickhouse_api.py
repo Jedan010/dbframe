@@ -206,7 +206,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         if exclude_names is not None:
             if isinstance(exclude_names, str):
                 exclude_names = [exclude_names]
-            names = names.difference(exclude_names)
+            names = names.difference(exclude_names, sort=False)
         return names.to_list()
 
     def get_table_columns(self, tables:list[str], 
