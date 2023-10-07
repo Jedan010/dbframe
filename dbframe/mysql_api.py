@@ -90,7 +90,7 @@ class MysqlDB(DatabaseTemplate):
         self.engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
         self._host = self.engine.url.host
         self._port = self.engine.url.port
-        self._database = self.engine.url.port
+        self._database = self.engine.url.database
         self._username = self.engine.url.username
         self._password = self.engine.url.password
         self._query = self.engine.url.query
