@@ -172,6 +172,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         super().__init__(*args, **kwargs)
 
         self._read_df_cache = lru_cache(cache_size)(self._read_df)
+        self._read_df_multi_cache = lru_cache(cache_size)(self._read_df_multi)
 
     @property
     def tables(self):
@@ -821,12 +822,47 @@ class ClickHouseDB(Client, DatabaseTemplate):
             last_date_df = last_date_df.loc[lambda x: x.lt(filter_date)]
         return last_date_df
 
+    def _read_df_multi(
+        self,
+        table_fields: dict[str, list[str]],
+        start_date: str = None,
+        end_date: str = None,
+        is_drop_duplicate_index: bool = True,
+        is_cache: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame:
+        
+        df = pd.DataFrame()
+        if isinstance(table_fields, list):
+            table_fields = {table: None for table in table_fields}
+        for _table, fields in table_fields.items():
+            _df = self.read_df(
+                table=_table,
+                start=start_date,
+                end=end_date,
+                fields=fields,
+                is_drop_duplicate_index=is_drop_duplicate_index,
+                is_cache=is_cache,
+                **kwargs,
+            )
+            if _df.empty:
+                continue
+            if df.empty:
+                df = _df
+            else:
+                df = df.join(_df, how='outer')
+        if is_drop_duplicate_index:
+            df = df.loc[~df.index.duplicated()]
+        return df
+
+
     def read_df_multi(
         self,
         table_fields: dict[str, list[str]],
         start_date: str = None,
         end_date: str = None,
         is_drop_duplicate_index: bool = True,
+        is_cache: bool = False,
         **kwargs,
     ):
         """
@@ -869,27 +905,20 @@ class ClickHouseDB(Client, DatabaseTemplate):
         1. 读取多个表的数据, 并将数据以outer方式合并为一个 dataframe        
         """
 
-        df = pd.DataFrame()
-        if isinstance(table_fields, list):
-            table_fields = {table: None for table in table_fields}
-        for _table, fields in table_fields.items():
-            _df = self.read_df(
-                table=_table,
-                start=start_date,
-                end=end_date,
-                fields=fields,
-                is_drop_duplicate_index=is_drop_duplicate_index,
-                **kwargs,
-            )
-            if _df.empty:
-                continue
-            if df.empty:
-                df = _df
-            else:
-                df = df.join(_df, how='outer')
-        if is_drop_duplicate_index:
-            df = df.loc[~df.index.duplicated()]
-        return df
+        if is_cache:
+            func = self._read_df_multi_cache
+        else:
+            func = self._read_df_multi
+        
+        return func(
+            table_fields=table_fields,
+            start_date=start_date,
+            end_date=end_date,
+            is_drop_duplicate_index=is_drop_duplicate_index,
+            is_cache=is_cache,
+            **kwargs,
+        )
+
 
     def drop_duplicate_data(
         self,
