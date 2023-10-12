@@ -398,7 +398,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 df.sort_index(inplace=True)
 
             if is_drop_duplicate_index:
-                df = df.loc[~df.index.duplicated()]
+                df = df.loc[~df.index.duplicated(keep='last')]
 
         return df
 
