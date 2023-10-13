@@ -11,7 +11,6 @@ setup(
     packages=find_packages(),
     install_requires=[
         'pymongo',
-        'lz4',
         'clickhouse_driver',
     ],
 )
