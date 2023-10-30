@@ -129,8 +129,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if user is not None:
                 if sqlalchemy.__version__ < '1.4':
                     url.username = user
-                else:   
-                    url.set(username=user)               
+                else:
+                    url.set(username=user)
             if password is not None:
                 if sqlalchemy.__version__ < '1.4':
                     url.password = password
@@ -210,8 +210,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
             names = names.difference(exclude_names, sort=False)
         return names.to_list()
 
-    def get_table_columns(self, tables:list[str], 
-                          exclude_names:list[str]=None,
+    def get_table_columns(
+        self,
+        tables: list[str],
+        exclude_names: list[str] = None,
     ) -> dict[str, list[str]]:
         """获取表的列名"""
         if isinstance(tables, str):
@@ -220,24 +222,24 @@ class ClickHouseDB(Client, DatabaseTemplate):
         for table in tables:
             res[table] = self.get_column_names(table, exclude_names)
         return res
-    
-    def get_table_date_counts(self, 
-                              tables: list[str], 
-                              start_date:str=None, 
-                              end_date:str=None, 
-                              date_name:str=None,
-                              groupby_name:str='date',
+
+    def get_table_date_counts(self,
+                              tables: list[str],
+                              start_date: str = None,
+                              end_date: str = None,
+                              date_name: str = None,
+                              groupby_name: str = 'date',
                               **kwargs) -> pd.DataFrame:
-        """获取表的每天数据条数"""   
+        """获取表的每天数据条数"""
         if isinstance(tables, str):
             tables = [tables]
         res = []
         for table in tables:
             df = self.read_df(
                 table=table,
-                start=start_date, 
+                start=start_date,
                 end=end_date,
-                fields=f"count(symbol) as {table}", 
+                fields=f"count(symbol) as {table}",
                 other_sql=f"GROUP BY {groupby_name}",
                 date_name=date_name,
                 index_col=groupby_name,
@@ -248,28 +250,27 @@ class ClickHouseDB(Client, DatabaseTemplate):
         return res_df
 
     def get_table_symbol_counts(
-            self, 
-            table:str,
-            start_date:str=None, 
-            end_date:str=None,
-            date_name:str='date', 
-            groupby_name:str = 'symbol',
-            query:list[str]=None,
-            **kwargs,
-        ) -> pd.DataFrame:
-        
+        self,
+        table: str,
+        start_date: str = None,
+        end_date: str = None,
+        date_name: str = 'date',
+        groupby_name: str = 'symbol',
+        query: list[str] = None,
+        **kwargs,
+    ) -> pd.DataFrame:
 
         return self.read_df(
-                table=table,
-                start=start_date,
-                end=end_date,
-                fields=f"min({date_name}) as start, max({date_name}) as end, count({date_name}) as count",
-                query=query,
-                other_sql=f"GROUP BY {groupby_name}",
-                index_col=groupby_name,
-                **kwargs,
-            )
-
+            table=table,
+            start=start_date,
+            end=end_date,
+            fields=
+            f"min({date_name}) as start, max({date_name}) as end, count({date_name}) as count",
+            query=query,
+            other_sql=f"GROUP BY {groupby_name}",
+            index_col=groupby_name,
+            **kwargs,
+        )
 
     def _read_df(
         self,
@@ -831,7 +832,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
-        
+
         df = pd.DataFrame()
         if isinstance(table_fields, list):
             table_fields = {table: None for table in table_fields}
@@ -854,7 +855,6 @@ class ClickHouseDB(Client, DatabaseTemplate):
         if is_drop_duplicate_index:
             df = df.loc[~df.index.duplicated()]
         return df
-
 
     def read_df_multi(
         self,
@@ -909,7 +909,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             func = self._read_df_multi_cache
         else:
             func = self._read_df_multi
-        
+
         return func(
             table_fields=table_fields,
             start_date=start_date,
@@ -919,16 +919,16 @@ class ClickHouseDB(Client, DatabaseTemplate):
             **kwargs,
         )
 
-
     def drop_duplicate_data(
         self,
         table: str,
         start: str = None,
         end: str = None,
         date_name: str = None,
+        query: list[str] = None,
     ):
         """删除数据库中重复数据"""
-        if start is None and end is None:
+        if start is None and end is None and query is None:
             df = self.read_df(table=table, is_drop_duplicate_index=True)
             self.execute(f'drop table if exists {table}')
             self.save_df(df, table)
@@ -938,9 +938,16 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 start=start,
                 end=end,
                 date_name=date_name,
+                query=query,
                 is_drop_duplicate_index=True,
             )
-            self.remove(table=table, start=start, end=end, date_name=date_name)
+            self.remove(
+                table=table,
+                start=start,
+                end=end,
+                date_name=date_name,
+                query=query,
+            )
             self.save_df(df, table)
 
     @classmethod
