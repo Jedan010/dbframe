@@ -17,7 +17,7 @@ from copy import deepcopy
 
 class ClickHouseDB(Client, DatabaseTemplate):
     """
-    ClickHouse 数据库操作类 
+    ClickHouse 数据库操作类
     """
 
     cls_dict = {}
@@ -33,7 +33,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         tcp_port: int = 9000,
         query: dict = None,
         compression: bool = False,
-        settings: dict = {'use_numpy': True},
+        settings: dict = {"use_numpy": True},
         cache_size: int = CACHE_SIZE,
         *args,
         **kwargs,
@@ -61,7 +61,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             设置, by default {'use_numpy': True}
         cache_size : int, optional
             缓存大小, by default CACHE_SIZE
-        
+
         Examples
         --------
         >>> from dbframe import ClickHouseDB
@@ -81,9 +81,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         if url is None:
             if host is None:
-                host = 'localhost'
+                host = "localhost"
             if database is None:
-                database = 'default'
+                database = "default"
             if user is None:
                 user = ""
             if password is None:
@@ -91,10 +91,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if http_port is None:
                 http_port = 8123
             if query is None:
-                query = {'charset': 'utf8'}
-            if sqlalchemy.__version__ < '1.4':
+                query = {"charset": "utf8"}
+            if sqlalchemy.__version__ < "1.4":
                 url = URL(
-                    drivername='clickhouse',
+                    drivername="clickhouse",
                     host=host,
                     database=database,
                     username=user,
@@ -104,7 +104,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 )
             else:
                 url = URL.create(
-                    drivername='clickhouse',
+                    drivername="clickhouse",
                     host=host,
                     database=database,
                     username=user,
@@ -117,32 +117,32 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 url = make_url(url)
             url = deepcopy(url)
             if host is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.host = host
                 else:
                     url.set(host=host)
             if database is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.database = database
                 else:
                     url.set(database=database)
             if user is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.username = user
                 else:
                     url.set(username=user)
             if password is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.password = password
                 else:
                     url.set(password=password)
             if http_port is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.port = http_port
                 else:
                     url.set(port=http_port)
             if query is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.query = query
                 else:
                     url.set(query=query)
@@ -161,13 +161,13 @@ class ClickHouseDB(Client, DatabaseTemplate):
         except Exception:
             warning("没有安装 sqlalchemy-clickhouse 库")
 
-        kwargs['host'] = self._host
-        kwargs['database'] = self._database
-        kwargs['user'] = self._user
-        kwargs['password'] = self._password
-        kwargs['port'] = self._tcp_port
-        kwargs['compression'] = self._compression
-        kwargs['settings'] = settings
+        kwargs["host"] = self._host
+        kwargs["database"] = self._database
+        kwargs["user"] = self._user
+        kwargs["password"] = self._password
+        kwargs["port"] = self._tcp_port
+        kwargs["compression"] = self._compression
+        kwargs["settings"] = settings
 
         super().__init__(*args, **kwargs)
 
@@ -176,7 +176,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
     @property
     def tables(self):
-        return [x[0] for x in self.execute('show tables')]
+        return [x[0] for x in self.execute("show tables")]
 
     @property
     def databases(self):
@@ -189,7 +189,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         df = self.query_dataframe(f"desc {table}")
         if df.empty:
             return df
-        df = df.set_index('name')['type']
+        df = df.set_index("name")["type"]
         return df
 
     def get_column_names(
@@ -223,13 +223,15 @@ class ClickHouseDB(Client, DatabaseTemplate):
             res[table] = self.get_column_names(table, exclude_names)
         return res
 
-    def get_table_date_counts(self,
-                              tables: list[str],
-                              start_date: str = None,
-                              end_date: str = None,
-                              date_name: str = None,
-                              groupby_name: str = 'date',
-                              **kwargs) -> pd.DataFrame:
+    def get_table_date_counts(
+        self,
+        tables: list[str],
+        start_date: str = None,
+        end_date: str = None,
+        date_name: str = None,
+        groupby_name: str = "date",
+        **kwargs,
+    ) -> pd.DataFrame:
         """获取表的每天数据条数"""
         if isinstance(tables, str):
             tables = [tables]
@@ -254,18 +256,16 @@ class ClickHouseDB(Client, DatabaseTemplate):
         table: str,
         start_date: str = None,
         end_date: str = None,
-        date_name: str = 'date',
-        groupby_name: str = 'symbol',
+        date_name: str = "date",
+        groupby_name: str = "symbol",
         query: list[str] = None,
         **kwargs,
     ) -> pd.DataFrame:
-
         return self.read_df(
             table=table,
             start=start_date,
             end=end_date,
-            fields=
-            f"min({date_name}) as start, max({date_name}) as end, count({date_name}) as count",
+            fields=f"min({date_name}) as start, max({date_name}) as end, count({date_name}) as count",
             query=query,
             other_sql=f"GROUP BY {groupby_name}",
             index_col=groupby_name,
@@ -281,15 +281,15 @@ class ClickHouseDB(Client, DatabaseTemplate):
         symbols: list[str] = None,
         query: list[str] = None,
         date_name: str = None,
-        index_col: list[str] = 'auto',
+        index_col: list[str] = "auto",
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
-        op_format: str = 'TabSeparatedWithNamesAndTypes',
+        op_format: str = "TabSeparatedWithNamesAndTypes",
         **kwargs,
     ) -> pd.DataFrame:
         """
-        读取 clickhouse 数据 
+        读取 clickhouse 数据
         """
         if table not in self.tables:
             return pd.DataFrame()
@@ -298,21 +298,22 @@ class ClickHouseDB(Client, DatabaseTemplate):
         cols: pd.Index = col_types.index
 
         if date_name is None:
-            date_name = 'date'
-            if 'date' not in col_types and 'datetime' in col_types:
-                date_name = 'datetime'
+            date_name = "date"
+            if "date" not in col_types and "datetime" in col_types:
+                date_name = "datetime"
 
-        if col_types.get(date_name) == 'Date':
+        if col_types.get(date_name) == "Date":
             if start:
                 start = pd.to_datetime(start).strftime("%Y-%m-%d")
             if end:
                 end = pd.to_datetime(end).strftime("%Y-%m-%d")
 
-        if index_col == 'auto':
+        if index_col == "auto":
             try:
-                ddl: str = self.execute(f'show create {table}')[0][0]
-                index_col = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n',
-                                       ddl)[0].split(',')
+                ddl: str = self.execute(f"show create {table}")[0][0]
+                index_col = re.findall(r"ORDER BY [(]?([^())]*)[)]?\n", ddl)[0].split(
+                    ","
+                )
                 index_col = [x.strip() for x in index_col]
             except Exception:
                 index_col = None
@@ -320,22 +321,22 @@ class ClickHouseDB(Client, DatabaseTemplate):
         elif index_col is not None:
             if isinstance(index_col, (int, str)):
                 index_col = [index_col]
-            index_col = [
-                cols[c] if isinstance(c, int) else c for c in index_col
-            ]
-            index_col = [c for c in index_col if c in cols]
+            index_col = [cols[c] if isinstance(c, int) else c for c in index_col]
 
-        if 'columns' in kwargs:
-            _columns = kwargs.get('columns')
-            del kwargs['columns']
+        if index_col is not None and index_col != "auto":
+            index_col_strict = [c for c in index_col if c in cols]
+
+        if "columns" in kwargs:
+            _columns = kwargs.get("columns")
+            del kwargs["columns"]
             if fields is None:
                 fields = _columns
 
-        if fields is not None and index_col is not None and index_col != 'auto':
+        if fields is not None and index_col is not None and index_col != "auto":
             if isinstance(fields, str):
                 fields = [fields]
             fields: pd.Index = pd.Index(fields)
-            fields = fields.union(index_col, sort=False)
+            fields = fields.union(index_col_strict, sort=False)
 
         SQL = self._gen_sql(
             table=table,
@@ -345,7 +346,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             symbols=symbols,
             query=query,
             date_name=date_name,
-            oper='SELECT',
+            oper="SELECT",
             other_sql=other_sql,
             op_format=op_format,
         )
@@ -356,35 +357,35 @@ class ClickHouseDB(Client, DatabaseTemplate):
             return df
 
         MAPPING = {
-            'String': 'object',
-            'UInt64': 'uint64',
-            'UInt32': 'uint32',
-            'UInt16': 'uint16',
-            'UInt8': 'uint8',
-            'Float64': 'float64',
-            'Float32': 'float32',
-            'Int64': 'int64',
-            'Int32': 'int32',
-            'Int16': 'int16',
-            'Int8': 'int8',
-            'Date': 'datetime64[D]',
-            'DateTime': 'datetime64[ns]',
-            'Nullable(String)': 'object',
-            'Nullable(UInt64)': 'uint64',
-            'Nullable(UInt32)': 'uint32',
-            'Nullable(UInt16)': 'uint16',
-            'Nullable(UInt8)': 'uint8',
-            'Nullable(Float64)': 'float64',
-            'Nullable(Float32)': 'float32',
-            'Nullable(Int64)': 'int64',
-            'Nullable(Int32)': 'int32',
-            'Nullable(Int16)': 'int16',
-            'Nullable(Int8)': 'int8',
-            'Nullable(Date)': 'datetime64[s]',
-            'Nullable(DateTime)': 'datetime64[ns]',
+            "String": "object",
+            "UInt64": "uint64",
+            "UInt32": "uint32",
+            "UInt16": "uint16",
+            "UInt8": "uint8",
+            "Float64": "float64",
+            "Float32": "float32",
+            "Int64": "int64",
+            "Int32": "int32",
+            "Int16": "int16",
+            "Int8": "int8",
+            "Date": "datetime64[D]",
+            "DateTime": "datetime64[ns]",
+            "Nullable(String)": "object",
+            "Nullable(UInt64)": "uint64",
+            "Nullable(UInt32)": "uint32",
+            "Nullable(UInt16)": "uint16",
+            "Nullable(UInt8)": "uint8",
+            "Nullable(Float64)": "float64",
+            "Nullable(Float32)": "float32",
+            "Nullable(Int64)": "int64",
+            "Nullable(Int32)": "int32",
+            "Nullable(Int16)": "int16",
+            "Nullable(Int8)": "int8",
+            "Nullable(Date)": "datetime64[s]",
+            "Nullable(DateTime)": "datetime64[ns]",
         }
 
-        df = df.replace(['None'], np.nan)
+        df = df.replace(["None"], np.nan)
         data_types = self.get_column_types(table)
         for col in df:
             if col not in data_types:
@@ -393,13 +394,14 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 continue
             df[col] = df[col].astype(MAPPING[data_types[col]])
 
-        if index_col is not None and index_col != 'auto':
+        if index_col is not None and index_col != "auto":
+            index_col = pd.Index(index_col).intersection(df.columns).tolist()
             df.set_index(index_col, inplace=True)
             if is_sort_index:
                 df.sort_index(inplace=True)
 
             if is_drop_duplicate_index:
-                df = df.loc[~df.index.duplicated(keep='last')]
+                df = df.loc[~df.index.duplicated(keep="last")]
 
         return df
 
@@ -412,11 +414,11 @@ class ClickHouseDB(Client, DatabaseTemplate):
         symbols: List[str] = None,
         query: List[str] = None,
         date_name: str = None,
-        index_col: List[str] = 'auto',
+        index_col: List[str] = "auto",
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
-        op_format: str = 'TabSeparatedWithNamesAndTypes',
+        op_format: str = "TabSeparatedWithNamesAndTypes",
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
@@ -451,12 +453,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
             输出格式, by default 'TabSeparatedWithNamesAndTypes'
         is_cache : bool, optional
             是否缓存, by default False
-        
+
         Returns
         -------
         pd.DataFrame
             dataframe 格式数据
-        
+
         Examples
         --------
         >>> from dbframe import ClickHouseDB
@@ -471,7 +473,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         >>>     settings={'use_numpy': True},
         >>> )
         >>> chdb.read_df('table_name')
-      
+
         """
         if is_cache:
             func = self._read_df_cache
@@ -498,7 +500,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         df: pd.DataFrame,
         table: str,
         is_compress: bool = False,
-        compress_type: str = 'LZ4HC',
+        compress_type: str = "LZ4HC",
         compress_level: int = 9,
         is_partition: bool = False,
         date_name=None,
@@ -506,20 +508,20 @@ class ClickHouseDB(Client, DatabaseTemplate):
         """创建一个表"""
 
         MAPPING = {
-            'object': 'String',
-            'uint64': 'UInt64',
-            'uint32': 'UInt32',
-            'uint16': 'UInt16',
-            'uint8': 'UInt8',
-            'float64': 'Float64',
-            'float32': 'Float32',
-            'int64': 'Int64',
-            'int32': 'Int32',
-            'int16': 'Int16',
-            'int8': 'Int8',
+            "object": "String",
+            "uint64": "UInt64",
+            "uint32": "UInt32",
+            "uint16": "UInt16",
+            "uint8": "UInt8",
+            "float64": "Float64",
+            "float32": "Float32",
+            "int64": "Int64",
+            "int32": "Int32",
+            "int16": "Int16",
+            "int8": "Int8",
             # 'bool': 'bool',
-            'datetime64[D]': 'Date',
-            'datetime64[ns]': 'DateTime'
+            "datetime64[D]": "Date",
+            "datetime64[ns]": "DateTime",
         }
 
         if df.index.names[0] is not None:
@@ -530,18 +532,21 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         dtypes_df = df.dtypes.replace(MAPPING)
         if is_compress:
-            if compress_type == 'LZ4':
+            if compress_type == "LZ4":
                 dtypes_df = dtypes_df + f"  CODEC({compress_type})"
-            elif compress_type == 'LZ4HC':
+            elif compress_type == "LZ4HC":
                 dtypes_df = dtypes_df + f"  CODEC({compress_type}({compress_level}))"
 
         dtypes_str = dtypes_df.to_string().replace("\n", ",\n")
 
         if date_name is None:
-            _date_dtype = dtypes_df[dtypes_df.str.startswith('Date')]
+            _date_dtype = dtypes_df[dtypes_df.str.startswith("Date")]
             date_name = _date_dtype.index[0] if not _date_dtype.empty else None
-        partition_str = f"PARTITION BY toYYYYMM({date_name})" \
-                        if date_name is not None and is_partition else ""
+        partition_str = (
+            f"PARTITION BY toYYYYMM({date_name})"
+            if date_name is not None and is_partition
+            else ""
+        )
 
         sql_create = f"""
             CREATE TABLE IF NOT EXISTS {table}
@@ -558,22 +563,22 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def chg_df_dtype(self, df: pd.DataFrame, table: str):
         """转换 dataframe 数据类型与表内类型一致"""
         MAPPING_REVERSE = {
-            'String': str,
-            'UInt64': np.int64,
-            'UInt32': np.int32,
-            'UInt16': np.int16,
-            'UInt8': np.int8,
-            'Float64': np.float64,
-            'Float32': np.float32,
-            'Int64': np.int64,
-            'Int32': np.int32,
-            'Int16': np.int16,
-            'Int8': np.int8,
-            'Date': np.datetime64,
-            'DateTime': np.datetime64,
+            "String": str,
+            "UInt64": np.int64,
+            "UInt32": np.int32,
+            "UInt16": np.int16,
+            "UInt8": np.int8,
+            "Float64": np.float64,
+            "Float32": np.float32,
+            "Int64": np.int64,
+            "Int32": np.int32,
+            "Int16": np.int16,
+            "Int8": np.int8,
+            "Date": np.datetime64,
+            "DateTime": np.datetime64,
         }
         table_type = self.get_column_types(table).replace(MAPPING_REVERSE)
-        df = df.apply(lambda x: x.astype(table_type[x.name], errors='ignore'))
+        df = df.apply(lambda x: x.astype(table_type[x.name], errors="ignore"))
         return df
 
     def save_df(
@@ -583,7 +588,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_partition: bool = False,
         date_name: str = None,
         is_compress: bool = False,
-        compress_type: str = 'LZ4HC',
+        compress_type: str = "LZ4HC",
         compress_level: int = 9,
         is_drop_duplicate_index: bool = False,
     ) -> int:
@@ -608,12 +613,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
             压缩等级, by default 9
         is_drop_duplicate_index : bool, optional
             是否删除重复索引, by default False
-        
+
         Returns
         -------
         int
             插入的数据条数
-        
+
         Examples
         --------
         >>> from dbframe import ClickHouseDB
@@ -632,7 +637,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         Notes
         -----
         1. 如果表不存在, 则会自动创建表
-        2. 如果表存在, 则会自动转换 dataframe 数据类型与表内类型一致       
+        2. 如果表存在, 则会自动转换 dataframe 数据类型与表内类型一致
         """
 
         if df.empty:
@@ -642,11 +647,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
             df = df.to_frame()
 
         for col in df.select_dtypes([bool]):
-            df[col] = df[col].astype('uint8')
-        for col in df.dtypes.loc[lambda x: x.eq('object')].index:
-            df[col] = df[col].replace({
-                'None': np.nan
-            }).astype(float, errors='ignore')
+            df[col] = df[col].astype("uint8")
+        for col in df.dtypes.loc[lambda x: x.eq("object")].index:
+            df[col] = df[col].replace({"None": np.nan}).astype(float, errors="ignore")
 
         if table not in self.tables:
             self.cread_table(
@@ -661,8 +664,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         if df.index.names[0] is not None:
             if is_drop_duplicate_index:
-                df = df.sort_index().pipe(
-                    lambda x: x.loc[~x.index.duplicated()])
+                df = df.sort_index().pipe(lambda x: x.loc[~x.index.duplicated()])
             df = df.reset_index()
 
         df = self.chg_df_dtype(df, table)
@@ -683,34 +685,37 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         col_types = self.get_column_types(table)
         if date_name is None:
-            date_name = 'date'
-            if 'date' not in col_types and 'datetime' in col_types:
-                date_name = 'datetime'
+            date_name = "date"
+            if "date" not in col_types and "datetime" in col_types:
+                date_name = "datetime"
 
         query = self._format_query(query)
         if start is not None:
             query.append(f"{date_name} >= '{start}'")
         if end is not None:
             query.append(f"{date_name} <= '{end}'")
-        query = ' AND '.join(query)
+        query = " AND ".join(query)
 
-        return self.execute(f"""
+        return self.execute(
+            f"""
             ALTER TABLE {table}
             DELETE WHERE {query}
-        """)
+        """
+        )
 
     def get_table_ddl(self, table: str):
         ddl = self.execute(f"show create {table}")[0][0]
         return ddl
 
     def __hash__(self) -> int:
-        return hash((self._host, self._tcp_port, self._database, self._user,
-                     self._password))
+        return hash(
+            (self._host, self._tcp_port, self._database, self._user, self._password)
+        )
 
     def get_latest_data(
         self,
         table: str,
-        order_by: list[str] = 'auto',
+        order_by: list[str] = "auto",
         limit_num: int = 1,
         **kwargs,
     ):
@@ -731,9 +736,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
         pd.DataFrame
             dataframe 格式数据
         """
-        if order_by == 'auto':
-            ddl: str = self.execute(f'show create {table}')[0][0]
-            order_by_str = re.findall(r'ORDER BY [(]?([^())]*)[)]?\n', ddl)[0]
+        if order_by == "auto":
+            ddl: str = self.execute(f"show create {table}")[0][0]
+            order_by_str = re.findall(r"ORDER BY [(]?([^())]*)[)]?\n", ddl)[0]
         elif isinstance(order_by, str):
             order_by_str = order_by
         else:
@@ -744,7 +749,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def get_last_date(
         self,
         table: str,
-        order_by: list[str] = 'auto',
+        order_by: list[str] = "auto",
         limit_num: int = 1,
         date_name: str = None,
         fields: list[str] = [],
@@ -764,7 +769,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         date_name : str, optional
             日期字段名, by default None
         fields : list[str], optional
-            字段名, by default []    
+            字段名, by default []
 
         Returns
         -------
@@ -774,9 +779,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         col_types = self.get_column_types(table)
         if date_name is None:
-            date_name = 'date'
-            if 'date' not in col_types and 'datetime' in col_types:
-                date_name = 'datetime'
+            date_name = "date"
+            if "date" not in col_types and "datetime" in col_types:
+                date_name = "datetime"
 
         return self.get_latest_data(
             table=table,
@@ -802,14 +807,14 @@ class ClickHouseDB(Client, DatabaseTemplate):
             表名列表, by default None
         filter_date : str, optional
             过滤日期, by default None
-        
+
         Returns
         -------
         pd.Series
             最后更新日期
         """
         if tables is None:
-            tables = [t for t in self.tables if not t.startswith('_')]
+            tables = [t for t in self.tables if not t.startswith("_")]
         if isinstance(tables, str):
             tables = [tables]
         res = {}
@@ -832,7 +837,6 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
-
         df = pd.DataFrame()
         if isinstance(table_fields, list):
             table_fields = {table: None for table in table_fields}
@@ -851,7 +855,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if df.empty:
                 df = _df
             else:
-                df = df.join(_df, how='outer')
+                df = df.join(_df, how="outer")
         if is_drop_duplicate_index:
             df = df.loc[~df.index.duplicated()]
         return df
@@ -876,12 +880,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
             开始日期, by default None
         end_date : str, optional
             结束日期, by default None
-        
+
         Returns
         -------
         pd.DataFrame
             dataframe 格式数据
-        
+
         Examples
         --------
         >>> from dbframe import ClickHouseDB
@@ -895,14 +899,14 @@ class ClickHouseDB(Client, DatabaseTemplate):
         >>>     compression=False,
         >>>     settings={'use_numpy': True},
         >>> )
-        >>> df = chdb.read_df_multi({'table1': ['field1', 'field2'], 
+        >>> df = chdb.read_df_multi({'table1': ['field1', 'field2'],
         >>>             'table2': ['field1', 'field2']})
         >>> df2 = chdb.read_df_multi({'table1': None,
         >>>             'table2': ['field1', 'field2']})
 
         Notes
         -----
-        1. 读取多个表的数据, 并将数据以outer方式合并为一个 dataframe        
+        1. 读取多个表的数据, 并将数据以outer方式合并为一个 dataframe
         """
 
         if is_cache:
@@ -930,7 +934,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         """删除数据库中重复数据"""
         if start is None and end is None and query is None:
             df = self.read_df(table=table, is_drop_duplicate_index=True)
-            self.execute(f'drop table if exists {table}')
+            self.execute(f"drop table if exists {table}")
             self.save_df(df, table)
         else:
             df = self.read_df(
@@ -971,7 +975,7 @@ def read_ch(
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
     other_sql: str = None,
-    op_format: str = 'TabSeparatedWithNamesAndTypes',
+    op_format: str = "TabSeparatedWithNamesAndTypes",
     is_cache: bool = False,
     **kwargs,
 ):
@@ -1005,7 +1009,7 @@ def save_ch(
     is_partition: bool = False,
     date_name: str = None,
     is_compress: bool = False,
-    compress_type: str = 'LZ4HC',
+    compress_type: str = "LZ4HC",
     compress_level: int = 9,
 ) -> int:
     """
