@@ -1023,6 +1023,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
             )
             self.save_df(df, table)
 
+    def delete_table(self, table: str):
+        return self.execute("drop table if exists {}".format(table))
+
     @classmethod
     def from_url(cls, url):
         """从 url 创建 ClickHouseDB 对象"""
