@@ -192,85 +192,151 @@ class ClickHouseDB(Client, DatabaseTemplate):
         df = df.set_index("name")["type"]
         return df
 
-    def get_column_names(
+    def _get_table_index_name(self, table: str) -> list[str]:
+        """取表的索引字段名"""
+        try:
+            ddl: str = self.execute(f"show create {table}")[0][0]
+            index_col: list[str] = re.findall(r"ORDER BY [(]?([^())]*)[)]?\n", ddl)[
+                0
+            ].split(",")
+            index_col = [x.strip() for x in index_col]
+            return index_col
+        except Exception:
+            return []
+
+    def get_table_column_name(
         self,
         table: str,
         exclude_names: list[str] = None,
+        is_exclude_index: bool = True,
     ) -> list[str]:
-        """获取表的列名"""
+        """
+        获取表的列名
+
+        """
         if table not in self.tables:
             return []
         df = self.get_column_types(table)
         names = df.index
+
         if df.empty:
             return names.to_list()
+
+        if is_exclude_index and exclude_names is None:
+            exclude_names = self._get_table_index_name(table)
+
         if exclude_names is not None:
             if isinstance(exclude_names, str):
                 exclude_names = [exclude_names]
+
             names = names.difference(exclude_names, sort=False)
+
         return names.to_list()
 
-    def get_table_columns(
+    def get_table_symbol_count(
         self,
-        tables: list[str],
-        exclude_names: list[str] = None,
-    ) -> dict[str, list[str]]:
-        """获取表的列名"""
-        if isinstance(tables, str):
-            tables = [tables]
-        res = {}
-        for table in tables:
-            res[table] = self.get_column_names(table, exclude_names)
-        return res
-
-    def get_table_date_counts(
-        self,
-        tables: list[str],
+        table: str,
         start_date: str = None,
         end_date: str = None,
         date_name: str = None,
         groupby_name: str = "date",
         **kwargs,
     ) -> pd.DataFrame:
-        """获取表的每天数据条数"""
-        if isinstance(tables, str):
-            tables = [tables]
-        res = []
-        for table in tables:
-            df = self.read_df(
-                table=table,
-                start=start_date,
-                end=end_date,
-                fields=f"count(symbol) as {table}",
-                other_sql=f"GROUP BY {groupby_name}",
-                date_name=date_name,
-                index_col=groupby_name,
-                **kwargs,
-            )
-            res.append(df)
-        res_df = pd.concat(res, axis=1)
-        return res_df
+        """
+        获取表的每天数据条数
+        """
 
-    def get_table_symbol_counts(
+        df = self.read_df(
+            table=table,
+            start=start_date,
+            end=end_date,
+            fields=f"count(symbol) as {table}",
+            other_sql=f"GROUP BY {groupby_name}",
+            date_name=date_name,
+            index_col=groupby_name,
+            **kwargs,
+        )
+
+        return df
+
+    def get_table_column_count(
         self,
         table: str,
         start_date: str = None,
         end_date: str = None,
-        date_name: str = "date",
-        groupby_name: str = "symbol",
-        query: list[str] = None,
+        date_name: str = None,
+        groupby_name: str = "date",
+        is_exclude_index: bool = True,
         **kwargs,
-    ) -> pd.DataFrame:
-        return self.read_df(
+    ):
+        """
+        获取表的每天每列数量
+        """
+
+        cols = self.get_table_column_name(
+            table=table,
+            is_exclude_index=is_exclude_index,
+        )
+        if groupby_name in cols:
+            cols.remove(groupby_name)
+
+        if not cols:
+            return pd.DataFrame()
+
+        fields = [f"Sum(isFinite({col})) as {col}" for col in cols]
+
+        df = self.read_df(
             table=table,
             start=start_date,
             end=end_date,
-            fields=f"min({date_name}) as start, max({date_name}) as end, count({date_name}) as count",
-            query=query,
+            fields=fields,
             other_sql=f"GROUP BY {groupby_name}",
+            date_name=date_name,
             index_col=groupby_name,
             **kwargs,
         )
+
+        return df
+
+    def get_table_date_desc(
+        self,
+        tables: list[str],
+        start_date: str = None,
+        end_date: str = None,
+        date_name: str = "date",
+        distinct_name: str = "date",
+        query: list[str] = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        if isinstance(tables, str):
+            tables = [tables]
+
+        res = []
+        for table in tables:
+            _df = self.read_df(
+                table=table,
+                start=start_date,
+                end=end_date,
+                fields=f"DISTINCT {distinct_name} AS {table}",
+                date_name=date_name,
+                query=query,
+                index_col=None,
+                **kwargs,
+            )
+
+            if _df.empty:
+                _df = pd.DataFrame(columns=["min", "max", "count"], index=[table])
+            else:
+                _df = _df.agg(["min", "max", "count"]).T
+
+            res.append(_df)
+
+        if not res:
+            return pd.DataFrame()
+
+        res_df = pd.concat(res)
+
+        return res_df
 
     def _read_df(
         self,
@@ -392,7 +458,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 continue
             if data_types[col] not in MAPPING:
                 continue
-            df[col] = df[col].astype(MAPPING[data_types[col]])
+            try:
+                df[col] = df[col].astype(MAPPING[data_types[col]])
+            except:
+                pass
 
         if index_col is not None and index_col != "auto":
             index_col = pd.Index(index_col).intersection(df.columns).tolist()
