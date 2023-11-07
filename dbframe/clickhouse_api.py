@@ -264,6 +264,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         table: str,
         start_date: str = None,
         end_date: str = None,
+        fields: list[str] = None,
         date_name: str = None,
         groupby_name: str = "date",
         is_exclude_index: bool = True,
@@ -273,17 +274,21 @@ class ClickHouseDB(Client, DatabaseTemplate):
         获取表的每天每列数量
         """
 
-        cols = self.get_table_column_name(
-            table=table,
-            is_exclude_index=is_exclude_index,
-        )
-        if groupby_name in cols:
-            cols.remove(groupby_name)
+        if fields is None:
+            fields = self.get_table_column_name(
+                table=table,
+                is_exclude_index=is_exclude_index,
+            )
+        elif isinstance(fields, str):
+            fields = [fields]
 
-        if not cols:
+        if groupby_name in fields:
+            fields.remove(groupby_name)
+
+        if not fields:
             return pd.DataFrame()
 
-        fields = [f"Sum(isFinite({col})) as {col}" for col in cols]
+        fields = [f"Sum(isFinite({col})) as {col}" for col in fields]
 
         df = self.read_df(
             table=table,
