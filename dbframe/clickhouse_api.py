@@ -121,31 +121,43 @@ class ClickHouseDB(Client, DatabaseTemplate):
                     url.host = host
                 else:
                     url.set(host=host)
+            else:
+                host = url.host
             if database is not None:
                 if sqlalchemy.__version__ < "1.4":
                     url.database = database
                 else:
                     url.set(database=database)
+            else:
+                database = url.database
             if user is not None:
                 if sqlalchemy.__version__ < "1.4":
                     url.username = user
                 else:
                     url.set(username=user)
+            else:
+                user = url.username
             if password is not None:
                 if sqlalchemy.__version__ < "1.4":
                     url.password = password
                 else:
                     url.set(password=password)
+            else:
+                password = url.password
             if http_port is not None:
                 if sqlalchemy.__version__ < "1.4":
                     url.port = http_port
                 else:
                     url.set(port=http_port)
+            else:
+                http_port = url.port
             if query is not None:
                 if sqlalchemy.__version__ < "1.4":
                     url.query = query
                 else:
                     url.set(query=query)
+            else:
+                query = url.query
 
         self._url = url
         self._host = host
