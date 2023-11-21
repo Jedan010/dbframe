@@ -116,6 +116,7 @@ class DatabaseTemplate(ABC):
             symbols_str = self._list2str(symbols)
             query.append(f"symbol in {symbols_str}")
 
+        query = [f"({x})" for x in query]
         where = "WHERE " + " AND ".join(query) if query else ""
 
         if fields is None:
