@@ -1,20 +1,22 @@
 from functools import update_wrapper
 from _thread import RLock
+import pandas as pd
+import numpy as np
 
 
 class _HashedSeq(list):
     __slots__ = "hashvalue"
 
     def __init__(self, tup, hash=hash):
-        tup = (tuple(x) if isinstance(x, list) else x for x in tup)
+        tup = (
+            tuple(x) if isinstance(x, (list, pd.Index, pd.Series, np.ndarray)) else x
+            for x in tup
+        )
         self[:] = tup
         self.hashvalue = hash(tuple(tup))
 
     def __hash__(self):
         return self.hashvalue
-
-    def __eq__(self, __value: object) -> bool:
-        return self.hashvalue == hash(__value)
 
 
 def _make_key(args, kwds, kwd_mark=(object(),)):
