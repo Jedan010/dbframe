@@ -3,8 +3,7 @@ from _thread import RLock
 
 
 class _HashedSeq(list):
-
-    __slots__ = 'hashvalue'
+    __slots__ = "hashvalue"
 
     def __init__(self, tup, hash=hash):
         tup = (tuple(x) if isinstance(x, list) else x for x in tup)
@@ -14,10 +13,12 @@ class _HashedSeq(list):
     def __hash__(self):
         return self.hashvalue
 
+    def __eq__(self, __value: object) -> bool:
+        return self.hashvalue == hash(__value)
 
-def _make_key(args, kwds, kwd_mark=(object(), )):
-    """Make a cache key from optionally typed positional and keyword arguments
-    """
+
+def _make_key(args, kwds, kwd_mark=(object(),)):
+    """Make a cache key from optionally typed positional and keyword arguments"""
     key = args
     if kwds:
         key += kwd_mark
@@ -43,6 +44,7 @@ def _lru_cache_wrapper(user_function, maxsize):
         def wrapper(*args, **kwargs):
             # no cache
             return user_function(*args, **kwargs)
+
     elif maxsize is None:
 
         def wrapper(*args, **kwargs):
@@ -53,6 +55,7 @@ def _lru_cache_wrapper(user_function, maxsize):
                 res = user_function(*args, **kwargs)
                 cache[key] = res
             return res
+
     else:
 
         def wrapper(*args, **kwargs):
@@ -82,7 +85,7 @@ def _lru_cache_wrapper(user_function, maxsize):
                     link = [root[PREV], root, key, res]
                     link[PREV][NEXT] = link[NEXT][PREV] = cache[key] = link
                     ## TODO 可以考虑换成cache的内存是否超过阈值
-                    full = (len(cache) >= maxsize)
+                    full = len(cache) >= maxsize
                 else:
                     # link replace root
                     link = root
@@ -114,8 +117,7 @@ def _lru_cache_wrapper(user_function, maxsize):
 
 
 def lru_cache(maxsize=10):
-    """Least-recently-used cache decorator.
-    """
+    """Least-recently-used cache decorator."""
     if callable(maxsize):
         user_function, maxsize = maxsize, 10
         wrapper = _lru_cache_wrapper(user_function, maxsize)
@@ -128,5 +130,4 @@ def lru_cache(maxsize=10):
 
         return decorating_function
     else:
-        raise TypeError(
-            'Expected first argument to be an integer, a callable, or None')
+        raise TypeError("Expected first argument to be an integer, a callable, or None")
