@@ -16,7 +16,7 @@ class DatabaseTemplate(ABC):
         fileds: List[str] = None,
         symbols: List[str] = None,
         query: List[str] = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         is_cache: bool = False,
@@ -53,7 +53,7 @@ class DatabaseTemplate(ABC):
         pass
 
     def _list2str(self, lst: list[str]):
-        if isinstance(lst, str):
+        if isinstance(lst, (str, int, float, bool)):
             lst = [lst]
         return str(tuple(lst)).replace(",)", ")")
 
@@ -73,14 +73,12 @@ class DatabaseTemplate(ABC):
                         continue
                     new_query.append(f"{x[0]} in {self._list2str(x[1])}")
                 else:
-                    raise ValueError(
-                        f"query {x} must be a list or tuple with length 2")
+                    raise ValueError(f"query {x} must be a list or tuple with length 2")
             elif isinstance(x, dict):
                 for k, v in x.items():
                     new_query.append(f"{k} in {self._list2str(v)}")
             else:
-                raise ValueError(
-                    f"query {x} must be a str or list or tuple or dict")
+                raise ValueError(f"query {x} must be a str or list or tuple or dict")
 
         return new_query
 
@@ -92,8 +90,8 @@ class DatabaseTemplate(ABC):
         fields: List[str] = None,
         symbols: List[str] = None,
         query: List[str] = None,
-        date_name: str = 'date',
-        oper: str = 'SELECT',
+        date_name: str = "date",
+        oper: str = "SELECT",
         other_sql: str = None,
         op_format: str = None,
     ) -> str:
@@ -104,11 +102,12 @@ class DatabaseTemplate(ABC):
         if start:
             query.append(f"{date_name} >= '{start}'")
         if end:
-            if date_name == 'datetime':
+            if date_name == "datetime":
                 _end = pd.to_datetime(end)
                 if _end.hour == _end.minute == _end.second == 0:
-                    end = _end.to_period("D").end_time.replace(microsecond=0,
-                                                               nanosecond=0)
+                    end = _end.to_period("D").end_time.replace(
+                        microsecond=0, nanosecond=0
+                    )
             query.append(f"{date_name} <= '{end}'")
         if symbols is not None:
             if isinstance(symbols, str):
@@ -120,10 +119,10 @@ class DatabaseTemplate(ABC):
         where = "WHERE " + " AND ".join(query) if query else ""
 
         if fields is None:
-            fields = '*'
+            fields = "*"
         elif not isinstance(fields, str):
-            fields = ', '.join(fields)
-        if oper in ['delete', 'DELETE']:
+            fields = ", ".join(fields)
+        if oper in ["delete", "DELETE"]:
             fields = ""
 
         other_sql = other_sql if other_sql else ""
@@ -147,7 +146,7 @@ def read_df(
     fileds: List[str] = None,
     symbols: List[str] = None,
     query: List[str] = None,
-    date_name: str = 'date',
+    date_name: str = "date",
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
     is_cache: bool = False,
@@ -167,6 +166,5 @@ def read_df(
     )
 
 
-def save_df(database: DatabaseTemplate, df: pd.DataFrame, table: str,
-            **kwargs) -> bool:
+def save_df(database: DatabaseTemplate, df: pd.DataFrame, table: str, **kwargs) -> bool:
     return database.save_df(df=df, table=table, **kwargs)
