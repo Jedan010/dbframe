@@ -278,8 +278,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
         end_date: str = None,
         fields: list[str] = None,
         date_name: str = None,
-        groupby_name: str = "date",
+        groupby_name: list[str] = "date",
+        query: list[str] = None,
         is_exclude_index: bool = True,
+        including_table_name: bool = True,
         **kwargs,
     ):
         """
@@ -294,8 +296,11 @@ class ClickHouseDB(Client, DatabaseTemplate):
         elif isinstance(fields, str):
             fields = [fields]
 
-        if groupby_name in fields:
-            fields.remove(groupby_name)
+        if isinstance(groupby_name, str):
+            groupby_name = [groupby_name]
+        for name in groupby_name:
+            if name in fields:
+                fields.remove(name)
 
         if fields is None or len(fields) == 0:
             return pd.DataFrame()
@@ -307,11 +312,24 @@ class ClickHouseDB(Client, DatabaseTemplate):
             start=start_date,
             end=end_date,
             fields=fields,
-            other_sql=f"GROUP BY {groupby_name}",
+            other_sql=f"GROUP BY {', '.join(groupby_name)}",
             date_name=date_name,
             index_col=groupby_name,
+            query=query,
             **kwargs,
         )
+
+        if df.empty:
+            return df
+
+        df = df.T
+
+        if including_table_name:
+            df.index = pd.MultiIndex.from_product(
+                [[table], df.index], names=["table_name", "column_name"]
+            )
+        else:
+            df.index.names = ["column_name"]
 
         return df
 
@@ -320,7 +338,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         table: str,
         start_date: str = None,
         end_date: str = None,
-        date_name: str = "date",
+        distinct_name: str = "date",
         query: list[str] = None,
         **kwargs,
     ) -> pd.Index:
@@ -330,8 +348,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
             table=table,
             start=start_date,
             end=end_date,
-            fields=[f"DISTINCT {date_name}"],
-            index_col=date_name,
+            fields=[f"DISTINCT {distinct_name}"],
+            index_col=distinct_name,
             query=query,
             **kwargs,
         ).index
@@ -345,7 +363,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         groupby_name: list[str] = None,
         date_name: str = "date",
         query: list[str] = None,
-        including_table: bool = True,
+        including_table_name: bool = True,
         **kwargs,
     ):
         """
@@ -370,8 +388,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 start=start_date,
                 end=end_date,
                 fields=[
-                    "MIN(date) AS start_date",
-                    "MAX(date) as end_date",
+                    f"MIN({date_name}) AS start_date",
+                    f"MAX({date_name}) as end_date",
                     f"COUNT(DISTINCT {date_name}) AS date_num",
                 ],
                 date_name=date_name,
@@ -380,8 +398,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 query=query,
                 **kwargs,
             )
-            if not _df.empty and including_table:
-                _df = _df.assign(table=table)
+            if not _df.empty and including_table_name:
+                _df = _df.assign(table_name=table)
 
             res.append(_df)
 
@@ -980,7 +998,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             else:
                 df = df.join(_df, how="outer")
         if is_drop_duplicate_index:
-            df = df.loc[~df.index.duplicated()]
+            df = df.loc[~df.index.duplicated(keep="last")]
         return df
 
     def read_df_multi(
