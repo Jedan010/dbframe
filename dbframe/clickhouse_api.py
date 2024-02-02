@@ -31,6 +31,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         password: str = None,
         http_port: int = None,
         tcp_port: int = 9000,
+        alt_hosts: str = None,
         query: dict = None,
         compression: bool = False,
         settings: dict = {"use_numpy": True},
@@ -55,6 +56,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
             http 端口, by default None
         tcp_port : int, optional
             tcp 端口, by default 9000
+        alt_hosts : str, optional
+            备用地址, by default None
+            list of alternative hosts for connection.
+            Example: alt_hosts=host1:port1,host2:port2.
         compression : bool, optional
             是否压缩, by default False
         settings : dict, optional
@@ -166,6 +171,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         self._password = password
         self._http_port = http_port
         self._tcp_port = tcp_port
+        self._alt_hosts = alt_hosts
         self._query = query
         self._compression = compression
         try:
@@ -178,6 +184,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         kwargs["user"] = self._user
         kwargs["password"] = self._password
         kwargs["port"] = self._tcp_port
+        kwargs["alt_hosts"] = self._alt_hosts
         kwargs["compression"] = self._compression
         kwargs["settings"] = settings
 
