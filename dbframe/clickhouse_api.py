@@ -36,6 +36,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         compression: bool = False,
         settings: dict = {"use_numpy": True},
         cache_size: int = CACHE_SIZE,
+        is_backup: bool = False,
         *args,
         **kwargs,
     ):
@@ -189,6 +190,15 @@ class ClickHouseDB(Client, DatabaseTemplate):
         kwargs["settings"] = settings
 
         super().__init__(*args, **kwargs)
+
+        self.is_backup = is_backup
+        if self._alt_hosts is not None:
+            self._db_backups: list[ClickHouseDB] = [self] + [
+                ClickHouseDB(url=self._url, host=_host)
+                for _host in self._alt_hosts.split(",")
+            ]
+        else:
+            self._db_backups = [self]
 
         self._read_df_cache = lru_cache(cache_size)(self._read_df)
         self._read_df_multi_cache = lru_cache(cache_size)(self._read_df_multi)
@@ -652,6 +662,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         compress_level: int = 9,
         is_partition: bool = False,
         date_name=None,
+        is_backup: bool = None,
     ):
         """创建一个表"""
 
@@ -706,7 +717,13 @@ class ClickHouseDB(Client, DatabaseTemplate):
             {partition_str}
             """
 
-        self.execute(sql_create)
+        if is_backup or (is_backup is None and self.is_backup):
+            return {
+                _db_backup._host: _db_backup.execute(sql_create)
+                for _db_backup in self._db_backups
+            }
+
+        return self.execute(sql_create)
 
     def chg_df_dtype(self, df: pd.DataFrame, table: str):
         """转换 dataframe 数据类型与表内类型一致"""
@@ -739,6 +756,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         compress_type: str = "LZ4HC",
         compress_level: int = 9,
         is_drop_duplicate_index: bool = False,
+        is_backup: bool = None,
     ) -> int:
         """
         保存 dataframe 数据至 clickhouse 数据库
@@ -808,6 +826,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 compress_level=compress_level,
                 is_partition=is_partition,
                 date_name=date_name,
+                is_backup=is_backup,
             )
 
         if df.index.names[0] is not None:
@@ -817,6 +836,13 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         df = self.chg_df_dtype(df, table)
 
+        if is_backup or (is_backup is None and self.is_backup):
+            return {
+                _db_backup._host: _db_backup.insert_dataframe(
+                    f"INSERT INTO {table} VALUES", df
+                )
+                for _db_backup in self._db_backups
+            }
         return self.insert_dataframe(f"INSERT INTO {table} VALUES", df)
 
     def remove(
@@ -826,6 +852,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         end: str = None,
         date_name: str = None,
         query: list[str] = None,
+        is_backup: bool = None,
     ):
         """删除数据"""
         if query is None and start is None and end is None:
@@ -844,12 +871,15 @@ class ClickHouseDB(Client, DatabaseTemplate):
             query.append(f"{date_name} <= '{end}'")
         query = " AND ".join(query)
 
-        return self.execute(
-            f"""
-            ALTER TABLE {table}
-            DELETE WHERE {query}
-        """
-        )
+        if is_backup or (is_backup is None and self.is_backup):
+            return {
+                _db_backup._host: _db_backup.execute(
+                    f"ALTER TABLE {table} DELETE WHERE {query}"
+                )
+                for _db_backup in self._db_backups
+            }
+
+        return self.execute(f"ALTER TABLE {table} DELETE WHERE {query}")
 
     def get_table_ddl(self, table: str):
         ddl = self.execute(f"show create {table}")[0][0]
@@ -1078,12 +1108,25 @@ class ClickHouseDB(Client, DatabaseTemplate):
         end: str = None,
         date_name: str = None,
         query: list[str] = None,
+        is_backup: bool = None,
     ):
         """删除数据库中重复数据"""
+        if is_backup or (is_backup is None and self.is_backup):
+            return {
+                _db_backup._host: _db_backup.drop_duplicate_data(
+                    table=table,
+                    start=start,
+                    end=end,
+                    date_name=date_name,
+                    query=query,
+                    is_backup=False,
+                )
+                for _db_backup in self._db_backups
+            }
         if start is None and end is None and query is None:
             df = self.read_df(table=table, is_drop_duplicate_index=True)
             self.execute(f"drop table if exists {table}")
-            self.save_df(df, table)
+            return self.save_df(df, table)
         else:
             df = self.read_df(
                 table=table,
@@ -1100,10 +1143,64 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 date_name=date_name,
                 query=query,
             )
-            self.save_df(df, table)
+            return self.save_df(df, table)
 
-    def delete_table(self, table: str):
+    def delete_table(self, table: str, is_backup: bool = None):
+        """删除表"""
+        if is_backup or (is_backup is None and self.is_backup):
+            return {
+                _db_backup._host: _db_backup.execute(f"drop table if exists {table}")
+                for _db_backup in self._db_backups
+            }
         return self.execute("drop table if exists {}".format(table))
+
+    def sync_backup_table(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        query: list[str] = None,
+        date_name: str = None,
+    ):
+        """同步备份数据库"""
+        if not self._alt_hosts:
+            return
+
+        df = self.read_df(
+            table=table,
+            start=start,
+            end=end,
+            query=query,
+            date_name=date_name,
+            is_drop_duplicate_index=True,
+        )
+
+        if df.empty:
+            return
+
+        ddl = self.get_table_ddl(table)
+        res = {}
+        for _db_backup in self._db_backups:
+            if _db_backup == self:
+                continue
+            if table not in _db_backup.tables:
+                _db_backup.execute(ddl)
+            else:
+                if start is None and end is None and query is None:
+                    _db_backup.execute(f"drop table if exists {table}")
+                    _db_backup.execute(ddl)
+                else:
+                    _db_backup.remove(
+                        table=table,
+                        start=start,
+                        end=end,
+                        date_name=date_name,
+                        query=query,
+                        is_backup=False,
+                    )
+            res[_db_backup._host] = _db_backup.save_df(df, table, is_backup=False)
+
+        return res
 
     @classmethod
     def from_url(cls, url):
