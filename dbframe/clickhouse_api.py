@@ -689,6 +689,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
         else:
             index_str = str(df.columns[0])
 
+        df = df.rename_axis(None, axis=1)
+
         dtypes_df = df.dtypes.replace(MAPPING)
         if is_compress:
             if compress_type == "LZ4":
