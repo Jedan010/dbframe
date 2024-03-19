@@ -211,6 +211,31 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def databases(self):
         return [x[0] for x in self.execute("show databases")]
 
+    def execute_sync(
+        self,
+        query,
+        params=None,
+        with_column_types=False,
+        external_tables=None,
+        query_id=None,
+        settings=None,
+        types_check=False,
+        columnar=False,
+    ):
+        return {
+            _db_backup._host: _db_backup.execute(
+                query=query,
+                params=params,
+                with_column_types=with_column_types,
+                external_tables=external_tables,
+                query_id=query_id,
+                settings=settings,
+                types_check=types_check,
+                columnar=columnar,
+            )
+            for _db_backup in self._db_backups
+        }
+
     def get_column_types(self, table: str) -> pd.Series:
         """获取表的列类型"""
         if table not in self.tables:
