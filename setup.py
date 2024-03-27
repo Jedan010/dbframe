@@ -6,11 +6,9 @@ setup(
     author="wujiede",
     author_email="547054738@qq.com",
     description="易于操作 dataFrame 的数据库助手",
-
     # 你要安装的包，通过 setuptools.find_packages 找到当前目录下有哪些包
     packages=find_packages(),
     install_requires=[
-        'pymongo',
-        'clickhouse_driver',
-    ],
+        "clickhouse_driver",
+    ],  # "pymongo",
 )
