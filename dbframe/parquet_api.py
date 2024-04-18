@@ -1,12 +1,15 @@
-from functools import lru_cache
 import os
+from copy import deepcopy
+from functools import lru_cache
+from typing import Callable
+
+import pandas as pd
+from pyarrow.lib import concat_tables
+from pyarrow.parquet import read_table as read_parquet
+
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
-import pandas as pd
-from pyarrow.parquet import read_table as read_parquet
-from pyarrow.lib import concat_tables
-from typing import Callable
-from copy import deepcopy
+
 
 class ParquetDB(DatabaseTemplate):
     """

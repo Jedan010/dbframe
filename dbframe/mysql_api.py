@@ -1,8 +1,10 @@
+from copy import deepcopy
 from typing import Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import sqlalchemy
+from pymysql.err import Error as PyMysqlError
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL, make_url
 
@@ -10,8 +12,6 @@ from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
 from dbframe.utility import repeat
-from pymysql.err import Error as PyMysqlError
-from copy import deepcopy
 
 
 class MysqlDB(DatabaseTemplate):

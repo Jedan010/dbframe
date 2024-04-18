@@ -1,18 +1,18 @@
 import re
+from copy import deepcopy
 from logging import warning
 from typing import List
 
 import numpy as np
 import pandas as pd
-from clickhouse_driver import Client
 import sqlalchemy
+from clickhouse_driver import Client
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import lru_cache
 from dbframe.database_api import DatabaseTemplate
 from dbframe.setting import CACHE_SIZE
-from copy import deepcopy
 
 
 class ClickHouseDB(Client, DatabaseTemplate):

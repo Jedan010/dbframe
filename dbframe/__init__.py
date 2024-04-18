@@ -10,6 +10,5 @@ try:
 except Exception:
     pass
 from dbframe.mysql_api import MysqlDB, read_sql, save_sql
-from dbframe.sqlite_api import SqliteDB
-
 from dbframe.parquet_api import ParquetDB
+from dbframe.sqlite_api import SqliteDB

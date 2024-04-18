@@ -1,7 +1,8 @@
-from functools import update_wrapper
 from _thread import RLock
-import pandas as pd
+from functools import update_wrapper
+
 import numpy as np
+import pandas as pd
 
 
 class _HashedSeq(list):
