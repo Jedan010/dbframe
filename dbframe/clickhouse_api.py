@@ -574,7 +574,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 continue
             try:
                 df[col] = df[col].astype(MAPPING[data_types[col]])
-            except:
+            except:  # noqa: E722
                 pass
 
         if index_col is not None and index_col != "auto":

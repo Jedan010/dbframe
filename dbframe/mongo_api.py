@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from lz4.block import compress as lz4_compress
-from lz4.block import decompress as lz4_decompress
+from lz4.block import compress as lz4_compress # type: ignore
+from lz4.block import decompress as lz4_decompress # type: ignore
 from pymongo import ASCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
