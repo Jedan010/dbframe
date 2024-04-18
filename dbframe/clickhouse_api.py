@@ -841,8 +841,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         for col in df.select_dtypes([bool]):
             df[col] = df[col].astype("uint8")
-        for col in df.dtypes.loc[lambda x: x.eq("object")].index:
-            df[col] = df[col].replace({"None": np.nan}).astype(float, errors="ignore")
+        # for col in df.dtypes.loc[lambda x: x.eq("object")].index:
+        #     df[col] = df[col].replace({"None": np.nan}).astype(float, errors="ignore")
 
         if table not in self.tables:
             self.cread_table(
