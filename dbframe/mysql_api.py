@@ -31,19 +31,19 @@ class MysqlDB(DatabaseTemplate):
     ) -> None:
         if url is None:
             if host is None:
-                host = 'localhost'
+                host = "localhost"
             if port is None:
-                port = '3306'
+                port = "3306"
             if database is None:
-                database = 'default'
+                database = "default"
             if username is None:
                 username = "root"
             if password is None:
                 password = ""
             if query is None:
-                query = {'charset': 'utf8'}
+                query = {"charset": "utf8"}
             url = URL(
-                drivername='mysql+pymysql',
+                drivername="mysql+pymysql",
                 host=host,
                 port=port,
                 database=database,
@@ -56,32 +56,32 @@ class MysqlDB(DatabaseTemplate):
                 url = make_url(url)
             url = deepcopy(url)
             if host is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.host = host
                 else:
                     url.set(host=host)
             if database is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.database = database
                 else:
                     url.set(database=database)
             if username is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.username = username
-                else:   
-                    url.set(username=username)               
+                else:
+                    url.set(username=username)
             if password is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.password = password
                 else:
                     url.set(password=password)
             if port is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.port = port
                 else:
                     url.set(port=port)
             if query is not None:
-                if sqlalchemy.__version__ < '1.4':
+                if sqlalchemy.__version__ < "1.4":
                     url.query = query
                 else:
                     url.set(query=query)
@@ -106,7 +106,7 @@ class MysqlDB(DatabaseTemplate):
         fields: Tuple[str] = None,
         symbols: Tuple[str] = None,
         query: Tuple[str] = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         index_col: Tuple[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -115,20 +115,18 @@ class MysqlDB(DatabaseTemplate):
         **kwargs,
     ):
         """
-        读取 mysql 数据 
+        读取 mysql 数据
         """
         cols: pd.Index = pd.read_sql_query(
-            f'desc {table}',
+            f"desc {table}",
             self.engine,
-            index_col='Field',
+            index_col="Field",
         ).index
 
         if index_col is not None:
             if isinstance(index_col, (int, str)):
                 index_col = [index_col]
-            index_col = [
-                cols[c] if isinstance(c, int) else c for c in index_col
-            ]
+            index_col = [cols[c] if isinstance(c, int) else c for c in index_col]
             index_col = [c for c in index_col if c in cols]
         if fields is not None and index_col is not None:
             if isinstance(fields, str):
@@ -146,7 +144,7 @@ class MysqlDB(DatabaseTemplate):
             symbols=symbols,
             query=query,
             date_name=date_name,
-            oper='SELECT',
+            oper="SELECT",
             other_sql=other_sql,
             op_format=op_format,
         )
@@ -161,7 +159,7 @@ class MysqlDB(DatabaseTemplate):
         if df.empty:
             return df
 
-        df = df.replace(['None'], np.nan)
+        df = df.replace(["None"], np.nan)
         if index_col is not None:
             if is_sort_index:
                 df.sort_index(inplace=True)
@@ -178,7 +176,7 @@ class MysqlDB(DatabaseTemplate):
         fields: Tuple[str] = None,
         symbols: Tuple[str] = None,
         query: Tuple[str] = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         index_col: Tuple[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -188,7 +186,7 @@ class MysqlDB(DatabaseTemplate):
         **kwargs,
     ) -> pd.DataFrame:
         """
-        读取 mysql 数据 
+        读取 mysql 数据
         """
         if is_cache:
             func = self._read_df_cache
@@ -214,8 +212,8 @@ class MysqlDB(DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        mode: str = 'insert',
-        if_exists: str = 'append',
+        mode: str = "insert",
+        if_exists: str = "append",
         index: bool = False,
         is_drop_duplicate_index: bool = False,
         **kwargs,
@@ -274,7 +272,7 @@ class MysqlDB(DatabaseTemplate):
         table: str,
         start: str = None,
         end: str = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         query: list[str] = None,
     ):
         """删除数据"""
@@ -286,7 +284,7 @@ class MysqlDB(DatabaseTemplate):
             query.append(f"{date_name} >= '{start}'")
         if end is not None:
             query.append(f"{date_name} <= '{end}'")
-        query = ' AND '.join(query)
+        query = " AND ".join(query)
 
         return self.engine.execute(f"DELETE FROM {table} WHERE {query}")
 
@@ -296,13 +294,13 @@ class MysqlDB(DatabaseTemplate):
         index_col: list[str],
         start: str = None,
         end: str = None,
-        date_name: str = 'date',
+        date_name: str = "date",
     ):
         """删除数据库中重复数据"""
         if start is None and end is None:
-            df = self._read_df(table=table,
-                               index_col=index_col,
-                               is_drop_duplicate_index=True)
+            df = self._read_df(
+                table=table, index_col=index_col, is_drop_duplicate_index=True
+            )
             self.engine.execute(f"DROP TABLE {table}")
             self.save_df(df=df, table=table)
 
@@ -324,6 +322,64 @@ class MysqlDB(DatabaseTemplate):
     def __hash__(self) -> int:
         return hash(self._url)
 
+    def get_table_date_desc(
+        self,
+        tables: list[str],
+        start_date: str = None,
+        end_date: str = None,
+        index_col: list[str] = None,
+        groupby_name: list[str] = None,
+        date_name: str = "date",
+        query: list[str] = None,
+        including_table_name: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        获取表中数据的日期统计数据
+        包括起始日期和结束日期和日期数量
+        """
+
+        if isinstance(tables, str):
+            tables = [tables]
+
+        res = []
+        other_sql = None
+        if groupby_name is not None:
+            if isinstance(groupby_name, str):
+                groupby_name = [groupby_name]
+            if index_col is None:
+                index_col = groupby_name
+            other_sql = f"GROUP BY {','.join(groupby_name)}"
+
+        for table in tables:
+            _df = self.read_df(
+                table=table,
+                start=start_date,
+                end=end_date,
+                fields=[
+                    f"MIN({date_name}) AS start_date",
+                    f"MAX({date_name}) AS end_date",
+                    f"COUNT(DISTINCT({date_name})) AS date_num",
+                ],
+                date_name=date_name,
+                index_col=index_col,
+                other_sql=other_sql,
+                query=query,
+                **kwargs,
+            )
+
+            if not _df.empty and including_table_name:
+                _df = _df.assign(table_name=table)
+
+            res.append(_df)
+
+        if not res:
+            return pd.DataFrame()
+
+        res_df = pd.concat(res)
+
+        return res_df
+
 
 def read_sql(
     database: MysqlDB,
@@ -333,7 +389,7 @@ def read_sql(
     fields: Tuple[str] = None,
     symbols: Tuple[str] = None,
     query: Tuple[str] = None,
-    date_name: str = 'date',
+    date_name: str = "date",
     index_col: Tuple[str] = None,
     is_sort_index: bool = True,
     is_drop_duplicate_index: bool = False,
@@ -343,7 +399,7 @@ def read_sql(
     **kwargs,
 ):
     """
-    读取 mysql 数据 
+    读取 mysql 数据
     """
     return database.read_df(
         table=table,
@@ -367,8 +423,8 @@ def save_sql(
     database: MysqlDB,
     df: pd.DataFrame,
     table: str,
-    mode: str = 'insert',
-    if_exists: str = 'append',
+    mode: str = "insert",
+    if_exists: str = "append",
     index: bool = False,
     is_drop_duplicate_index: bool = False,
     **kwargs,
