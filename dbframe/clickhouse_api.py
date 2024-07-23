@@ -193,9 +193,9 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         self.is_backup = is_backup
         if self._alt_hosts is not None:
-            self._db_backups: list[ClickHouseDB] = [self] + [
+            self._db_backups: list[ClickHouseDB] = [
                 ClickHouseDB(url=self._url, host=_host)
-                for _host in self._alt_hosts.split(",")
+                for _host in set([self._host] + self._alt_hosts.split(","))
             ]
         else:
             self._db_backups = [self]
