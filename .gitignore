@@ -10,3 +10,4 @@ __pycache__
 .vscode
 docs/build/
 !docs/build/html/sample
+build
