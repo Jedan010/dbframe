@@ -91,7 +91,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             if database is None:
                 database = "default"
             if user is None:
-                user = ""
+                user = "default"
             if password is None:
                 password = ""
             if http_port is None:
@@ -706,6 +706,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             # 'bool': 'bool',
             "datetime64[D]": "Date",
             "datetime64[ns]": "DateTime",
+            "datetime64[us]": "DateTime",
         }
 
         if df.index.names[0] is not None:
