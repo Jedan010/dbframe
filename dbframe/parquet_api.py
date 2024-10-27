@@ -1,16 +1,12 @@
 import os
-from copy import deepcopy
-from dbframe.cache import lru_cache
-from typing import Callable
 
 import pandas as pd
-from pyarrow.lib import concat_tables
-from pyarrow.parquet import read_table, read_schema
-from pyarrow.lib import TimestampType
 from fastparquet import write
+from pyarrow.lib import TimestampType
+from pyarrow.parquet import read_schema, read_table
 
+from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.setting import CACHE_SIZE
 
 
 class ParquetDB(DatabaseTemplate):
@@ -18,16 +14,15 @@ class ParquetDB(DatabaseTemplate):
     Parquet 数据库操作类
     """
 
-    cls_dict = {}
-
-    def __init__(
-        self,
-        path_data: str,
-        cache_size: int = CACHE_SIZE,
-    ):
+    def __init__(self, path_data: str):
         self.base_dir = path_data
 
-        self._read_df_cache = lru_cache(maxsize=cache_size)(self._read_df)
+    def __str__(self):
+        return f"ParquetDB(path={self.base_dir})"
+
+    @property
+    def _params(self):
+        return (self.base_dir,)
 
     @property
     def tables(self):
@@ -35,7 +30,8 @@ class ParquetDB(DatabaseTemplate):
             name[:-8] for name in os.listdir(self.base_dir) if name.endswith(".parquet")
         ]
 
-    def _read_df(
+    @global_cache
+    def read_df(
         self,
         table: str,
         start: str = None,
@@ -47,6 +43,7 @@ class ParquetDB(DatabaseTemplate):
         index_col: list[str] = "auto",
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -121,72 +118,6 @@ class ParquetDB(DatabaseTemplate):
                 df = df.loc[~df.index.duplicated()]
 
         return df
-
-    def read_df(
-        self,
-        table: str,
-        start: str = None,
-        end: str = None,
-        fields: list[str] = None,
-        symbols: list[str] = None,
-        query: list[tuple[str, str, str]] = None,
-        date_name: str = None,
-        index_col: list[str] = "auto",
-        is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = False,
-        is_cache: bool = False,
-        **kwargs,
-    ):
-        """
-        读取 parquet 数据
-
-        Parameters
-        ----------
-        start : str
-            开始时间
-        end : str
-            结束时间
-        fields : list[str], optional
-            字段列表, 默认为 None
-        symbols : list[str], optional
-            股票列表, 默认为 None
-        query : list[tuple[str, str, str]] | list[list[tuple[str, str, str]]], optional
-            查询条件, 使用DNF范式, 默认为 None
-            例如：[["symbol", "in", ["000001", "000002"]], ["date", ">", "2020-01-01"]]
-            list[list[tuple[str, str, str]]] 为 OR 查询
-            list[tuple[str, str, str]] 为 AND 查询
-        index_col : list[str], optional
-            索引列, 默认为 None
-        is_sort_index : bool, optional
-            是否按索引排序, 默认为 True
-        is_drop_duplicate_index : bool, optional
-            是否删除重复索引, 默认为 False
-        is_cache : bool, optional
-            是否使用缓存, 默认为 False
-
-        Returns
-        -------
-        pd.DataFrame
-            数据
-        """
-
-        if is_cache:
-            func = self._read_df_cache
-        else:
-            func = self._read_df
-        return func(
-            table=table,
-            start=start,
-            end=end,
-            fields=fields,
-            symbols=symbols,
-            query=query,
-            date_name=date_name,
-            index_col=index_col,
-            is_sort_index=is_sort_index,
-            is_drop_duplicate_index=is_drop_duplicate_index,
-            **kwargs,
-        )
 
     def save_df(self, df: pd.DataFrame, table: str, **kwargs) -> bool:
         """

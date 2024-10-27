@@ -1,8 +1,12 @@
+import sys
 from _thread import RLock
-from functools import update_wrapper
+from collections import OrderedDict
+from functools import wraps
 
 import numpy as np
 import pandas as pd
+
+from dbframe.setting import LIMIT_SIZE, LIMIT_TYPE
 
 
 class _HashedSeq(list):
@@ -20,117 +24,117 @@ class _HashedSeq(list):
         return self.hashvalue
 
 
-def _make_key(args, kwds, kwd_mark=(object(),)):
-    """Make a cache key from optionally typed positional and keyword arguments"""
-    key = args
-    if kwds:
-        key += kwd_mark
-        for item in kwds.items():
-            key += item
-    return _HashedSeq(key)
+class MemoryCache:
+    """Memory Cache Unit."""
+
+    def __init__(self, limit_size: int = 128, limit_type: str = "length"):
+        self.limit_size = limit_size
+        self.limit_type = limit_type
+        self._size = 0
+        self.od = OrderedDict()
+        self.lock = RLock()
+
+    def __setitem__(self, key, value):
+        with self.lock:
+            if key in self.od:
+                self._size -= self._get_value_size(self.od[key])
+            self._size += self._get_value_size(value)
+
+            self.od.__setitem__(key, value)
+            # move the key to end,make it latest
+            self.od.move_to_end(key)
+
+            if self.is_limited:
+                # pop the oldest items beyond size limit
+                while self._size > self.limit_size:
+                    self.popitem(last=False)
+
+    def __getitem__(self, key):
+        with self.lock:
+            v = self.od.__getitem__(key)
+            self.od.move_to_end(key)
+            return v
+
+    def __contains__(self, key):
+        return key in self.od
+
+    def __len__(self):
+        return self.od.__len__()
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}<max_size:{self.limit_size if self.is_limited else 'no limit'} "
+            f"total_size:{self._size}>\n{self.od.__repr__()}"
+        )
+
+    def set_max_size(self, max_size: int):
+        self.limit_size = max_size
+
+    @property
+    def is_limited(self):
+        """whether memory cache is limited"""
+        return self.limit_size > 0
+
+    @property
+    def total_size(self):
+        return self._size
+
+    def clear(self):
+        with self.lock:
+            self._size = 0
+            self.od.clear()
+
+    def get(self, key, default=None):
+        return self.od.get(key, default)
+
+    def popitem(self, last=True):
+        with self.lock:
+            k, v = self.od.popitem(last=last)
+            self._size -= self._get_value_size(v)
+
+            return k, v
+
+    def pop(self, key):
+        with self.lock:
+            v = self.od.pop(key)
+            self._size -= self._get_value_size(v)
+
+            return v
+
+    def _get_value_size(self, value):
+        if self.limit_type == "length":
+            return 1
+        elif self.limit_type == "sizeof":
+            return sys.getsizeof(value)
+        raise ValueError("limit_type must be 'length' or 'sizeof'")
 
 
-def _lru_cache_wrapper(user_function, maxsize):
-    """lru cache"""
-    sentinel = object()
-    make_key = _make_key
-    PREV, NEXT, KEY, VAL = 0, 1, 2, 3
-
-    cache = {}
-    full = False
-    lock = RLock()
-    root = []
-    root[:] = [root, root, None, None]
-
-    if maxsize <= 0:
-
-        def wrapper(*args, **kwargs):
-            # no cache
-            return user_function(*args, **kwargs)
-
-    elif maxsize is None:
-
-        def wrapper(*args, **kwargs):
-            # simple cache
-            key = make_key(args, kwargs)
-            res = cache.get(key, sentinel)
-            if res is sentinel:
-                res = user_function(*args, **kwargs)
-                cache[key] = res
-            return res
-
-    else:
-
-        def wrapper(*args, **kwargs):
-            # size limited caching that tracks accesses by recency
-            # 永远插在root的前一个位置
-            # root的下一个作为最后一个
-            nonlocal root, full
-            key = make_key(args, kwargs)
-            with lock:
-                link = cache.get(key)
-                if link is not None:
-                    # Move the link to the front of the circular queue
-                    # delete
-                    link[NEXT][PREV] = link[PREV]
-                    link[PREV][NEXT] = link[NEXT]
-                    # insert to root prev
-                    link[NEXT] = root
-                    link[PREV] = root[PREV]
-                    root[PREV][NEXT] = root[PREV] = link
-                    return link[VAL]
-            res = user_function(*args, **kwargs)
-            with lock:
-                if key in cache:
-                    pass
-                elif not full:
-                    # insert to root prev
-                    link = [root[PREV], root, key, res]
-                    link[PREV][NEXT] = link[NEXT][PREV] = cache[key] = link
-                    ## TODO 可以考虑换成cache的内存是否超过阈值
-                    full = len(cache) >= maxsize
-                else:
-                    # link replace root
-                    link = root
-                    link[KEY] = key
-                    link[VAL] = res
-                    cache[key] = link
-
-                    # root move to root next and del old data
-                    root = root[NEXT]
-                    del cache[root[KEY]]
-                    root[KEY] = root[VAL] = None
-            return res
-
-        def cache_len():
-            with lock:
-                return len(cache)
-
-        def cache_clear():
-            nonlocal full
-            with lock:
-                cache.clear()
-                root[:] = [root, root, None, None]
-                full = False
-
-        wrapper.cache_len = cache_len
-        wrapper.cache_clear = cache_clear
-        wrapper.__cache = cache
-        return wrapper
+CACHE = MemoryCache(limit_size=LIMIT_SIZE, limit_type=LIMIT_TYPE)
 
 
-def lru_cache(maxsize=10):
-    """Least-recently-used cache decorator."""
-    if callable(maxsize):
-        user_function, maxsize = maxsize, 10
-        wrapper = _lru_cache_wrapper(user_function, maxsize)
-        return update_wrapper(wrapper, user_function)
-    elif maxsize is None or isinstance(maxsize, int):
+def global_cache(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        is_cache = kwargs.pop("is_cache", False)
 
-        def decorating_function(user_function):
-            wrapper = _lru_cache_wrapper(user_function, maxsize)
-            return update_wrapper(wrapper, user_function)
+        _key = ("[database]", self.__class__.__name__)
+        _key += self._params
+        _key += ("[func]", func.__name__)
+        _key += ("[args]", *args)
+        _key += ("[kwargs]",)
+        for item in kwargs.items():
+            _key += item
 
-        return decorating_function
-    else:
-        raise TypeError("Expected first argument to be an integer, a callable, or None")
+        key = _HashedSeq(_key)
+
+        if key in CACHE:
+            return CACHE[key]
+
+        result = func(self, *args, **kwargs)
+
+        if is_cache:
+            CACHE[key] = result
+
+        return result
+
+    return wrapper

@@ -1,17 +1,12 @@
 import os
 from functools import wraps
-from typing import List, Literal, Tuple
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 
-from dbframe.cache import lru_cache
+from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.setting import CACHE_SIZE
-
-
-def _list2str(lst: List[str]):
-    return str(tuple(lst)).replace(",)", ")")
 
 
 class HdfsDB(pd.HDFStore, DatabaseTemplate):
@@ -27,9 +22,9 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         complib: str = None,
         fletcher32: bool = False,
         **kwargs,
-    ) -> None:
+    ):
         if not os.path.isfile(path):
-            mode = 'a'
+            mode = "a"
         super().__init__(
             path=path,
             mode=mode,
@@ -38,25 +33,35 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             fletcher32=fletcher32,
             **kwargs,
         )
+        self.path = path
         self.mode = mode
         self.close()
         self._decorate_funcs()
 
-        self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
+    def __str__(self):
+        return f"HdfsDB(path={self.path})"
+
+    @property
+    def _params(self):
+        return (self.path,)
+
+    @property
+    def tables(self):
+        return [x.replace("/", "") for x in self.keys()]
 
     def _decorate_funcs(self):
         names = [
-            'select',
-            'append',
-            'put',
-            'get',
-            'remove',
-            '__contains__',
-            '__delitem__',
-            'info',
-            'keys',
-            'save_df',
-            'read_df',
+            "select",
+            "append",
+            "put",
+            "get",
+            "remove",
+            "__contains__",
+            "__delitem__",
+            "info",
+            "keys",
+            "save_df",
+            "read_df",
         ]
         for name in names:
             func = getattr(self, name)
@@ -64,17 +69,16 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             setattr(self, name, func_decorated)
 
     def _safe_operation(self, func):
-
         @wraps(func)
         def decorated(*args, **kwargs):
             if func.__name__ in [
-                    'append',
-                    'save_df',
-                    'remove',
-                    '__delitem__',
-                    'put',
+                "append",
+                "save_df",
+                "remove",
+                "__delitem__",
+                "put",
             ]:
-                self.mode = 'a'
+                self.mode = "a"
             mode = self.mode
             try:
                 self.open(mode=mode)
@@ -91,10 +95,11 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        format: Literal['table', 'fixed'] = 'table',
+        format: Literal["table", "fixed"] = "table",
         data_columns: list[str] = True,
-        complib: Literal['zlib', 'lzo', 'bzip2', 'blosc', 'blosc:lz4',
-                         'blosc:lz4hc'] = None,
+        complib: Literal[
+            "zlib", "lzo", "bzip2", "blosc", "blosc:lz4", "blosc:lz4hc"
+        ] = None,
         complevel: int = None,
         chunksize: int = None,
         is_match_dtype: bool = True,
@@ -108,11 +113,9 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             return False
 
         if format == "fixed":
-            self.put(key=table,
-                     value=df,
-                     format=format,
-                     data_columns=data_columns,
-                     **kwargs)
+            self.put(
+                key=table, value=df, format=format, data_columns=data_columns, **kwargs
+            )
             return True
 
         if is_match_dtype and self.__contains__(table):
@@ -155,20 +158,22 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
 
         return True
 
-    def _read_df(
+    @global_cache
+    def read_df(
         self,
         table: str,
         start: str = None,
         end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
-        date_name: str = 'date',
+        fields: list[str] = None,
+        symbols: list[str] = None,
+        query: list[str] = None,
+        date_name: str = "date",
         start_idx: int = None,
         stop_idx: int = None,
-        index_cols: List[str] = None,
+        index_cols: list[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -178,8 +183,13 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if not self.__contains__(table):
             return pd.DataFrame()
 
-        if (start is None and end is None and fields is None
-                and symbols is None and query is None):
+        if (
+            start is None
+            and end is None
+            and fields is None
+            and symbols is None
+            and query is None
+        ):
             return self.select(
                 key=table,
                 start=start_idx,
@@ -196,9 +206,8 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
         if _df.empty:
             return _df
         if start is not None or end is not None:
-            if not isinstance(_df.index,
-                              pd.MultiIndex) and _df.index.name == date_name:
-                date_name = 'index'
+            if not isinstance(_df.index, pd.MultiIndex) and _df.index.name == date_name:
+                date_name = "index"
             if start is not None:
                 where.append(f'{date_name} >= "{start}"')
             if end is not None:
@@ -207,10 +216,12 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             if isinstance(symbols, str):
                 symbols = [symbols]
             symbols = list(symbols)
-            symbol_name = 'symbol'
-            if not isinstance(_df.index,
-                              pd.MultiIndex) and _df.index.name == symbol_name:
-                symbol_name = 'index'
+            symbol_name = "symbol"
+            if (
+                not isinstance(_df.index, pd.MultiIndex)
+                and _df.index.name == symbol_name
+            ):
+                symbol_name = "index"
             where.append(f"{symbol_name} = {symbols}")
         if fields is not None and isinstance(fields, str):
             fields = [fields]
@@ -230,112 +241,3 @@ class HdfsDB(pd.HDFStore, DatabaseTemplate):
             df = df.loc[~df.index.duplicated()]
 
         return df
-
-    def read_df(
-        self,
-        table: str,
-        start: str = None,
-        end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
-        date_name: str = 'date',
-        start_idx: int = None,
-        stop_idx: int = None,
-        index_cols: List[str] = None,
-        is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = False,
-        is_cache: bool = False,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """
-        读取 DataFrame 数据
-        """
-        if is_cache:
-            func = self._read_df_cache
-        else:
-            func = self._read_df
-        return func(
-            table=table,
-            start=start,
-            end=end,
-            fields=fields,
-            symbols=symbols,
-            query=query,
-            date_name=date_name,
-            start_idx=start_idx,
-            stop_idx=stop_idx,
-            index_cols=index_cols,
-            is_sort_index=is_sort_index,
-            is_drop_duplicate_index=is_drop_duplicate_index,
-            **kwargs,
-        )
-
-    @property
-    def tables(self):
-        return [x.replace("/", "") for x in self.keys()]
-
-    def __hash__(self) -> int:
-        return hash(self._path)
-
-
-def read_h5(
-    database: HdfsDB,
-    table: str,
-    start: str = None,
-    end: str = None,
-    fields: Tuple[str] = None,
-    symbols: Tuple[str] = None,
-    query: Tuple[str] = None,
-    date_name: str = 'date',
-    start_idx: int = None,
-    stop_idx: int = None,
-    is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = False,
-    is_cache: bool = False,
-    **kwargs,
-) -> pd.DataFrame:
-    """
-    读取 h5 文件数据
-    """
-    return database.read_df(
-        table=table,
-        start=start,
-        end=end,
-        fields=fields,
-        symbols=symbols,
-        query=query,
-        date_name=date_name,
-        start_idx=start_idx,
-        stop_idx=stop_idx,
-        is_sort_index=is_sort_index,
-        is_drop_duplicate_index=is_drop_duplicate_index,
-        is_cache=is_cache,
-        **kwargs,
-    )
-
-
-def save_h5(
-    database: HdfsDB,
-    df: pd.DataFrame,
-    table: str,
-    mode: str = 'insert',
-    format: str = 'table',
-    complib: str = None,
-    complevel: int = None,
-    date_name: str = 'date',
-    **kwargs,
-) -> bool:
-    """
-    保存数据至 h5 文件
-    """
-    return database.save_df(
-        df=df,
-        table=table,
-        mode=mode,
-        format=format,
-        complib=complib,
-        complevel=complevel,
-        date_name=date_name,
-        **kwargs,
-    )

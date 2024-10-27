@@ -1,7 +1,6 @@
 import re
 from copy import deepcopy
 from logging import warning
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -10,17 +9,14 @@ from clickhouse_driver import Client
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL, make_url
 
-from dbframe.cache import lru_cache
+from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.setting import CACHE_SIZE
 
 
 class ClickHouseDB(Client, DatabaseTemplate):
     """
     ClickHouse 数据库操作类
     """
-
-    cls_dict = {}
 
     def __init__(
         self,
@@ -35,7 +31,6 @@ class ClickHouseDB(Client, DatabaseTemplate):
         query: dict = None,
         compression: bool = False,
         settings: dict = {"use_numpy": True},
-        cache_size: int = CACHE_SIZE,
         is_backup: bool = False,
         *args,
         **kwargs,
@@ -98,26 +93,17 @@ class ClickHouseDB(Client, DatabaseTemplate):
                 http_port = 8123
             if query is None:
                 query = {"charset": "utf8"}
-            if sqlalchemy.__version__ < "1.4":
-                url = URL(
-                    drivername="clickhouse",
-                    host=host,
-                    database=database,
-                    username=user,
-                    password=password,
-                    port=http_port,
-                    query=query,
-                )
-            else:
-                url = URL.create(
-                    drivername="clickhouse",
-                    host=host,
-                    database=database,
-                    username=user,
-                    password=password,
-                    port=http_port,
-                    query=query,
-                )
+
+            _url_func = URL if sqlalchemy.__version__ < "1.4" else URL.create
+            url: URL = _url_func(
+                drivername="clickhouse",
+                host=host,
+                database=database,
+                username=user,
+                password=password,
+                port=http_port,
+                query=query,
+            )
         else:
             if isinstance(url, str):
                 url = make_url(url)
@@ -200,8 +186,12 @@ class ClickHouseDB(Client, DatabaseTemplate):
         else:
             self._db_backups = [self]
 
-        self._read_df_cache = lru_cache(cache_size)(self._read_df)
-        self._read_df_multi_cache = lru_cache(cache_size)(self._read_df_multi)
+    def __str__(self):
+        return f"ClickhouseDB(host={self._host}, database={self._database})"
+
+    @property
+    def _params(self):
+        return (self._host, self._tcp_port, self._database, self._user)
 
     @property
     def tables(self):
@@ -211,248 +201,8 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def databases(self):
         return [x[0] for x in self.execute("show databases")]
 
-    def execute_sync(
-        self,
-        query,
-        params=None,
-        with_column_types=False,
-        external_tables=None,
-        query_id=None,
-        settings=None,
-        types_check=False,
-        columnar=False,
-    ):
-        return {
-            _db_backup._host: _db_backup.execute(
-                query=query,
-                params=params,
-                with_column_types=with_column_types,
-                external_tables=external_tables,
-                query_id=query_id,
-                settings=settings,
-                types_check=types_check,
-                columnar=columnar,
-            )
-            for _db_backup in self._db_backups
-        }
-
-    def get_column_types(self, table: str) -> pd.Series:
-        """获取表的列类型"""
-        if table not in self.tables:
-            return pd.Series()
-        df = self.query_dataframe(f"desc {table}")
-        if df.empty:
-            return df
-        df = df.set_index("name")["type"]
-        return df
-
-    def _get_table_index_name(self, table: str) -> list[str]:
-        """取表的索引字段名"""
-        try:
-            ddl: str = self.execute(f"show create {table}")[0][0]
-            index_col: list[str] = re.findall(r"ORDER BY [(]?([^())]*)[)]?\n", ddl)[
-                0
-            ].split(",")
-            index_col = [x.strip() for x in index_col]
-            return index_col
-        except Exception:
-            return []
-
-    def get_table_column_name(
-        self,
-        table: str,
-        exclude_names: list[str] = None,
-        is_exclude_index: bool = True,
-    ) -> list[str]:
-        """
-        获取表的列名
-
-        """
-        if table not in self.tables:
-            return []
-        df = self.get_column_types(table)
-        names = df.index
-
-        if df.empty:
-            return names.to_list()
-
-        if is_exclude_index and exclude_names is None:
-            exclude_names = self._get_table_index_name(table)
-
-        if exclude_names is not None:
-            if isinstance(exclude_names, str):
-                exclude_names = [exclude_names]
-
-            names = names.difference(exclude_names, sort=False)
-
-        return names.to_list()
-
-    def get_table_symbol_count(
-        self,
-        table: str,
-        start_date: str = None,
-        end_date: str = None,
-        date_name: str = None,
-        groupby_name: str = "date",
-        **kwargs,
-    ) -> pd.DataFrame:
-        """
-        获取表的每天数据条数
-        """
-
-        df = self.read_df(
-            table=table,
-            start=start_date,
-            end=end_date,
-            fields=f"count(symbol) as {table}",
-            other_sql=f"GROUP BY {groupby_name}",
-            date_name=date_name,
-            index_col=groupby_name,
-            **kwargs,
-        )
-
-        return df
-
-    def get_table_column_count(
-        self,
-        table: str,
-        start_date: str = None,
-        end_date: str = None,
-        fields: list[str] = None,
-        date_name: str = None,
-        groupby_name: list[str] = "date",
-        query: list[str] = None,
-        is_exclude_index: bool = True,
-        including_table_name: bool = True,
-        **kwargs,
-    ):
-        """
-        获取表的每天每列数量
-        """
-
-        if fields is None:
-            fields = self.get_table_column_name(
-                table=table,
-                is_exclude_index=is_exclude_index,
-            )
-        elif isinstance(fields, str):
-            fields = [fields]
-
-        if isinstance(groupby_name, str):
-            groupby_name = [groupby_name]
-        for name in groupby_name:
-            if name in fields:
-                fields.remove(name)
-
-        if fields is None or len(fields) == 0:
-            return pd.DataFrame()
-
-        fields = [f"Sum(isFinite({col})) as {col}" for col in fields]
-
-        df = self.read_df(
-            table=table,
-            start=start_date,
-            end=end_date,
-            fields=fields,
-            other_sql=f"GROUP BY {', '.join(groupby_name)}",
-            date_name=date_name,
-            index_col=groupby_name,
-            query=query,
-            **kwargs,
-        )
-
-        if df.empty:
-            return df
-
-        df = df.T
-
-        if including_table_name:
-            df.index = pd.MultiIndex.from_product(
-                [[table], df.index], names=["table_name", "column_name"]
-            )
-        else:
-            df.index.names = ["column_name"]
-
-        return df
-
-    def get_table_dates(
-        self,
-        table: str,
-        start_date: str = None,
-        end_date: str = None,
-        distinct_name: str = "date",
-        query: list[str] = None,
-        **kwargs,
-    ) -> pd.Index:
-        """获取数据库内表格的日期列表"""
-
-        return self.read_df(
-            table=table,
-            start=start_date,
-            end=end_date,
-            fields=[f"DISTINCT {distinct_name}"],
-            index_col=distinct_name,
-            query=query,
-            **kwargs,
-        ).index
-
-    def get_table_date_desc(
-        self,
-        tables: list[str],
-        start_date: str = None,
-        end_date: str = None,
-        index_col: list[str] = None,
-        groupby_name: list[str] = None,
-        date_name: str = "date",
-        query: list[str] = None,
-        including_table_name: bool = True,
-        **kwargs,
-    ):
-        """
-        获取数据库内表格的日期统计数据
-        包括起始日期, 最终日期, 日期数量
-        """
-
-        if isinstance(tables, str):
-            tables = [tables]
-
-        res = []
-        other_sql = None
-        if groupby_name is not None:
-            if isinstance(groupby_name, str):
-                groupby_name = [groupby_name]
-            if index_col is None:
-                index_col = groupby_name
-            other_sql = f"GROUP BY {', '.join(groupby_name)}"
-        for table in tables:
-            _df = self.read_df(
-                table=table,
-                start=start_date,
-                end=end_date,
-                fields=[
-                    f"MIN({date_name}) AS start_date",
-                    f"MAX({date_name}) as end_date",
-                    f"COUNT(DISTINCT {date_name}) AS date_num",
-                ],
-                date_name=date_name,
-                index_col=index_col,
-                other_sql=other_sql,
-                query=query,
-                **kwargs,
-            )
-            if not _df.empty and including_table_name:
-                _df = _df.assign(table_name=table)
-
-            res.append(_df)
-
-        if not res:
-            return pd.DataFrame()
-
-        res_df = pd.concat(res)
-
-        return res_df
-
-    def _read_df(
+    @global_cache
+    def read_df(
         self,
         table: str,
         start: str = None,
@@ -466,6 +216,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
         op_format: str = "TabSeparatedWithNamesAndTypes",
+        is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -588,95 +339,46 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return df
 
-    def read_df(
+    @global_cache
+    def read_df_multi(
         self,
-        table: str,
-        start: str = None,
-        end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
-        date_name: str = None,
-        index_col: List[str] = "auto",
-        is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = False,
-        other_sql: str = None,
-        op_format: str = "TabSeparatedWithNamesAndTypes",
+        table_fields: dict[str, list[str]],
+        start_date: str = None,
+        end_date: str = None,
+        is_drop_duplicate_index: bool = True,
         is_cache: bool = False,
         **kwargs,
     ) -> pd.DataFrame:
         """
-        读取 clickhouse 数据库数据, 转化为 dataframe 的格式
-
-        Parameters
-        ----------
-        table : str
-            表名
-        start : str, optional
-            开始日期, by default None
-        end : str, optional
-            结束日期, by default None
-        fields : List[str], optional
-            字段名, by default None
-        symbols : List[str], optional
-            代码列表, by default None
-        query : List[str], optional
-            查询语句, by default None
-        date_name : str, optional
-            日期字段名, by default None
-        index_col : List[str], optional
-            索引字段名, by default 'auto'
-        is_sort_index : bool, optional
-            是否按索引排序, by default True
-        is_drop_duplicate_index : bool, optional
-            是否删除重复索引, by default False
-        other_sql : str, optional
-            其他 sql 语句, by default None
-        op_format : str, optional
-            输出格式, by default 'TabSeparatedWithNamesAndTypes'
-        is_cache : bool, optional
-            是否缓存, by default False
-
-        Returns
-        -------
-        pd.DataFrame
-            dataframe 格式数据
-
-        Examples
-        --------
-        >>> from dbframe import ClickHouseDB
-        >>> chdb = ClickHouseDB(
-        >>>     host='localhost',
-        >>>     database='default',
-        >>>     user='default',
-        >>>     password='',
-        >>>     http_port=8123,
-        >>>     tcp_port=9000,
-        >>>     compression=False,
-        >>>     settings={'use_numpy': True},
-        >>> )
-        >>> chdb.read_df('table_name')
-
+        多表读取数据并合并
         """
-        if is_cache:
-            func = self._read_df_cache
-        else:
-            func = self._read_df
-        return func(
-            table=table,
-            start=start,
-            end=end,
-            fields=fields,
-            symbols=symbols,
-            query=query,
-            date_name=date_name,
-            index_col=index_col,
-            is_sort_index=is_sort_index,
-            is_drop_duplicate_index=is_drop_duplicate_index,
-            other_sql=other_sql,
-            op_format=op_format,
-            **kwargs,
-        )
+
+        df = pd.DataFrame()
+
+        if isinstance(table_fields, list):
+            table_fields = {table: None for table in table_fields}
+
+        for _table, fields in table_fields.items():
+            _df = self.read_df(
+                table=_table,
+                start=start_date,
+                end=end_date,
+                fields=fields,
+                is_drop_duplicate_index=is_drop_duplicate_index,
+                is_cache=is_cache,
+                **kwargs,
+            )
+            if _df.empty:
+                continue
+            if df.empty:
+                df = _df
+            else:
+                df = df.join(_df, how="outer")
+
+        if is_drop_duplicate_index:
+            df = df.loc[~df.index.duplicated(keep="last")]
+
+        return df
 
     def cread_table(
         self,
@@ -909,14 +611,225 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return self.execute(f"ALTER TABLE {table} DELETE WHERE {query}")
 
+    def get_column_types(self, table: str) -> pd.Series:
+        """获取表的列类型"""
+        if table not in self.tables:
+            return pd.Series()
+        df = self.query_dataframe(f"desc {table}")
+        if df.empty:
+            return df
+        df = df.set_index("name")["type"]
+        return df
+
+    def _get_table_index_name(self, table: str) -> list[str]:
+        """取表的索引字段名"""
+        try:
+            ddl: str = self.execute(f"show create {table}")[0][0]
+            index_col: list[str] = re.findall(r"ORDER BY [(]?([^())]*)[)]?\n", ddl)[
+                0
+            ].split(",")
+            index_col = [x.strip() for x in index_col]
+            return index_col
+        except Exception:
+            return []
+
+    def get_table_column_name(
+        self,
+        table: str,
+        exclude_names: list[str] = None,
+        is_exclude_index: bool = True,
+    ) -> list[str]:
+        """
+        获取表的列名
+
+        """
+        if table not in self.tables:
+            return []
+        df = self.get_column_types(table)
+        names = df.index
+
+        if df.empty:
+            return names.to_list()
+
+        if is_exclude_index and exclude_names is None:
+            exclude_names = self._get_table_index_name(table)
+
+        if exclude_names is not None:
+            if isinstance(exclude_names, str):
+                exclude_names = [exclude_names]
+
+            names = names.difference(exclude_names, sort=False)
+
+        return names.to_list()
+
+    def get_table_symbol_count(
+        self,
+        table: str,
+        start_date: str = None,
+        end_date: str = None,
+        date_name: str = None,
+        groupby_name: str = "date",
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        获取表的每天数据条数
+        """
+
+        df = self.read_df(
+            table=table,
+            start=start_date,
+            end=end_date,
+            fields=f"count(symbol) as {table}",
+            other_sql=f"GROUP BY {groupby_name}",
+            date_name=date_name,
+            index_col=groupby_name,
+            **kwargs,
+        )
+
+        return df
+
+    def get_table_column_count(
+        self,
+        table: str,
+        start_date: str = None,
+        end_date: str = None,
+        fields: list[str] = None,
+        date_name: str = None,
+        groupby_name: list[str] = "date",
+        query: list[str] = None,
+        is_exclude_index: bool = True,
+        including_table_name: bool = True,
+        **kwargs,
+    ):
+        """
+        获取表的每天每列数量
+        """
+
+        if fields is None:
+            fields = self.get_table_column_name(
+                table=table,
+                is_exclude_index=is_exclude_index,
+            )
+        elif isinstance(fields, str):
+            fields = [fields]
+
+        if isinstance(groupby_name, str):
+            groupby_name = [groupby_name]
+        for name in groupby_name:
+            if name in fields:
+                fields.remove(name)
+
+        if fields is None or len(fields) == 0:
+            return pd.DataFrame()
+
+        fields = [f"Sum(isFinite({col})) as {col}" for col in fields]
+
+        df = self.read_df(
+            table=table,
+            start=start_date,
+            end=end_date,
+            fields=fields,
+            other_sql=f"GROUP BY {', '.join(groupby_name)}",
+            date_name=date_name,
+            index_col=groupby_name,
+            query=query,
+            **kwargs,
+        )
+
+        if df.empty:
+            return df
+
+        df = df.T
+
+        if including_table_name:
+            df.index = pd.MultiIndex.from_product(
+                [[table], df.index], names=["table_name", "column_name"]
+            )
+        else:
+            df.index.names = ["column_name"]
+
+        return df
+
+    def get_table_dates(
+        self,
+        table: str,
+        start_date: str = None,
+        end_date: str = None,
+        distinct_name: str = "date",
+        query: list[str] = None,
+        **kwargs,
+    ) -> pd.Index:
+        """获取数据库内表格的日期列表"""
+
+        return self.read_df(
+            table=table,
+            start=start_date,
+            end=end_date,
+            fields=[f"DISTINCT {distinct_name}"],
+            index_col=distinct_name,
+            query=query,
+            **kwargs,
+        ).index
+
+    def get_table_date_desc(
+        self,
+        tables: list[str],
+        start_date: str = None,
+        end_date: str = None,
+        index_col: list[str] = None,
+        groupby_name: list[str] = None,
+        date_name: str = "date",
+        query: list[str] = None,
+        including_table_name: bool = True,
+        **kwargs,
+    ):
+        """
+        获取数据库内表格的日期统计数据
+        包括起始日期, 最终日期, 日期数量
+        """
+
+        if isinstance(tables, str):
+            tables = [tables]
+
+        res = []
+        other_sql = None
+        if groupby_name is not None:
+            if isinstance(groupby_name, str):
+                groupby_name = [groupby_name]
+            if index_col is None:
+                index_col = groupby_name
+            other_sql = f"GROUP BY {', '.join(groupby_name)}"
+        for table in tables:
+            _df = self.read_df(
+                table=table,
+                start=start_date,
+                end=end_date,
+                fields=[
+                    f"MIN({date_name}) AS start_date",
+                    f"MAX({date_name}) as end_date",
+                    f"COUNT(DISTINCT {date_name}) AS date_num",
+                ],
+                date_name=date_name,
+                index_col=index_col,
+                other_sql=other_sql,
+                query=query,
+                **kwargs,
+            )
+            if not _df.empty and including_table_name:
+                _df = _df.assign(table_name=table)
+
+            res.append(_df)
+
+        if not res:
+            return pd.DataFrame()
+
+        res_df = pd.concat(res)
+
+        return res_df
+
     def get_table_ddl(self, table: str):
         ddl = self.execute(f"show create {table}")[0][0]
         return ddl
-
-    def __hash__(self) -> int:
-        return hash(
-            (self._host, self._tcp_port, self._database, self._user, self._password)
-        )
 
     def get_latest_data(
         self,
@@ -1034,101 +947,6 @@ class ClickHouseDB(Client, DatabaseTemplate):
             last_date_df = last_date_df.loc[lambda x: x.lt(filter_date)]
         return last_date_df
 
-    def _read_df_multi(
-        self,
-        table_fields: dict[str, list[str]],
-        start_date: str = None,
-        end_date: str = None,
-        is_drop_duplicate_index: bool = True,
-        is_cache: bool = False,
-        **kwargs,
-    ) -> pd.DataFrame:
-        df = pd.DataFrame()
-        if isinstance(table_fields, list):
-            table_fields = {table: None for table in table_fields}
-        for _table, fields in table_fields.items():
-            _df = self.read_df(
-                table=_table,
-                start=start_date,
-                end=end_date,
-                fields=fields,
-                is_drop_duplicate_index=is_drop_duplicate_index,
-                is_cache=is_cache,
-                **kwargs,
-            )
-            if _df.empty:
-                continue
-            if df.empty:
-                df = _df
-            else:
-                df = df.join(_df, how="outer")
-        if is_drop_duplicate_index:
-            df = df.loc[~df.index.duplicated(keep="last")]
-        return df
-
-    def read_df_multi(
-        self,
-        table_fields: dict[str, list[str]],
-        start_date: str = None,
-        end_date: str = None,
-        is_drop_duplicate_index: bool = True,
-        is_cache: bool = False,
-        **kwargs,
-    ):
-        """
-        从数据库中的多个表读取数据
-
-        Parameters
-        ----------
-        table_fields : dict[str, list[str]]
-            表名与字段名的字典
-        start_date : str, optional
-            开始日期, by default None
-        end_date : str, optional
-            结束日期, by default None
-
-        Returns
-        -------
-        pd.DataFrame
-            dataframe 格式数据
-
-        Examples
-        --------
-        >>> from dbframe import ClickHouseDB
-        >>> chdb = ClickHouseDB(
-        >>>     host='localhost',
-        >>>     database='default',
-        >>>     user='default',
-        >>>     password='',
-        >>>     http_port=8123,
-        >>>     tcp_port=9000,
-        >>>     compression=False,
-        >>>     settings={'use_numpy': True},
-        >>> )
-        >>> df = chdb.read_df_multi({'table1': ['field1', 'field2'],
-        >>>             'table2': ['field1', 'field2']})
-        >>> df2 = chdb.read_df_multi({'table1': None,
-        >>>             'table2': ['field1', 'field2']})
-
-        Notes
-        -----
-        1. 读取多个表的数据, 并将数据以outer方式合并为一个 dataframe
-        """
-
-        if is_cache:
-            func = self._read_df_multi_cache
-        else:
-            func = self._read_df_multi
-
-        return func(
-            table_fields=table_fields,
-            start_date=start_date,
-            end_date=end_date,
-            is_drop_duplicate_index=is_drop_duplicate_index,
-            is_cache=is_cache,
-            **kwargs,
-        )
-
     def drop_duplicate_data(
         self,
         table: str,
@@ -1182,6 +1000,31 @@ class ClickHouseDB(Client, DatabaseTemplate):
             }
         return self.execute("drop table if exists {}".format(table))
 
+    def execute_sync(
+        self,
+        query,
+        params=None,
+        with_column_types=False,
+        external_tables=None,
+        query_id=None,
+        settings=None,
+        types_check=False,
+        columnar=False,
+    ):
+        return {
+            _db_backup._host: _db_backup.execute(
+                query=query,
+                params=params,
+                with_column_types=with_column_types,
+                external_tables=external_tables,
+                query_id=query_id,
+                settings=settings,
+                types_check=types_check,
+                columnar=columnar,
+            )
+            for _db_backup in self._db_backups
+        }
+
     def sync_backup_table(
         self,
         table: str,
@@ -1229,79 +1072,3 @@ class ClickHouseDB(Client, DatabaseTemplate):
             res[_db_backup._host] = _db_backup.save_df(df, table, is_backup=False)
 
         return res
-
-    @classmethod
-    def from_url(cls, url):
-        """从 url 创建 ClickHouseDB 对象"""
-        if url not in ClickHouseDB.cls_dict:
-            ClickHouseDB.cls_dict[url] = super().from_url(url)
-        return ClickHouseDB.cls_dict.get(url)
-
-
-def read_ch(
-    database: ClickHouseDB,
-    table: str,
-    start: str = None,
-    end: str = None,
-    fields: List[str] = None,
-    symbols: List[str] = None,
-    query: List[str] = None,
-    date_name: str = None,
-    index_col: List[str] = None,
-    is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = False,
-    other_sql: str = None,
-    op_format: str = "TabSeparatedWithNamesAndTypes",
-    is_cache: bool = False,
-    **kwargs,
-):
-    if isinstance(database, str):
-        database = ClickHouseDB.from_url(database)
-    elif not isinstance(database, ClickHouseDB):
-        raise ValueError("client 只能是 CHDB 或者 地址字符串格式")
-
-    return database.read_df(
-        table=table,
-        start=start,
-        end=end,
-        fields=fields,
-        symbols=symbols,
-        query=query,
-        date_name=date_name,
-        index_col=index_col,
-        is_sort_index=is_sort_index,
-        is_drop_duplicate_index=is_drop_duplicate_index,
-        other_sql=other_sql,
-        op_format=op_format,
-        is_cache=is_cache,
-        **kwargs,
-    )
-
-
-def save_ch(
-    database: ClickHouseDB,
-    df: pd.DataFrame,
-    table: str,
-    is_partition: bool = False,
-    date_name: str = None,
-    is_compress: bool = False,
-    compress_type: str = "LZ4HC",
-    compress_level: int = 9,
-) -> int:
-    """
-    保存 dataframe 数据至 clickhouse 数据库
-    """
-    if isinstance(database, str):
-        database = ClickHouseDB.from_url(database)
-    elif not isinstance(database, ClickHouseDB):
-        raise ValueError("chdb 只能是 CHDB 或者 地址字符串格式")
-
-    return database.save_df(
-        df=df,
-        table=table,
-        is_compress=is_compress,
-        compress_type=compress_type,
-        compress_level=compress_level,
-        is_partition=is_partition,
-        date_name=date_name,
-    )

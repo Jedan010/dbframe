@@ -4,14 +4,11 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import sqlalchemy
-from pymysql.err import Error as PyMysqlError
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL, make_url
 
-from dbframe.cache import lru_cache
+from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.setting import CACHE_SIZE
-from dbframe.utility import repeat
 
 
 class MysqlDB(DatabaseTemplate):
@@ -95,10 +92,19 @@ class MysqlDB(DatabaseTemplate):
         self._password = self.engine.url.password
         self._query = self.engine.url.query
 
-        self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
+    def __str__(self):
+        return f"MysqlDB(host={self._host}, database={self._database})"
 
-    @repeat(error_type=(PyMysqlError, IOError))
-    def _read_df(
+    @property
+    def _params(self):
+        return (self._host, self._port, self._database, self._username)
+
+    @property
+    def tables(self):
+        return self.engine.table_names()
+
+    @global_cache
+    def read_df(
         self,
         table: str,
         start: str = None,
@@ -112,6 +118,7 @@ class MysqlDB(DatabaseTemplate):
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
         op_format: str = None,
+        is_cache: bool = False,
         **kwargs,
     ):
         """
@@ -167,46 +174,6 @@ class MysqlDB(DatabaseTemplate):
             if is_drop_duplicate_index:
                 df = df.loc[~df.index.duplicated()]
         return df
-
-    def read_df(
-        self,
-        table: str,
-        start: str = None,
-        end: str = None,
-        fields: Tuple[str] = None,
-        symbols: Tuple[str] = None,
-        query: Tuple[str] = None,
-        date_name: str = "date",
-        index_col: Tuple[str] = None,
-        is_sort_index: bool = True,
-        is_drop_duplicate_index: bool = False,
-        other_sql: str = None,
-        op_format: str = None,
-        is_cache: bool = False,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """
-        读取 mysql 数据
-        """
-        if is_cache:
-            func = self._read_df_cache
-        else:
-            func = self._read_df
-        return func(
-            table=table,
-            start=start,
-            end=end,
-            fields=fields,
-            symbols=symbols,
-            query=query,
-            date_name=date_name,
-            index_col=index_col,
-            is_sort_index=is_sort_index,
-            is_drop_duplicate_index=is_drop_duplicate_index,
-            other_sql=other_sql,
-            op_format=op_format,
-            **kwargs,
-        )
 
     def save_df(
         self,
@@ -315,13 +282,6 @@ class MysqlDB(DatabaseTemplate):
             self.remove(table=table, start=start, end=end, date_name=date_name)
             self.save_df(df=df, table=table)
 
-    @property
-    def tables(self):
-        return self.engine.table_names()
-
-    def __hash__(self) -> int:
-        return hash(self._url)
-
     def get_table_date_desc(
         self,
         tables: list[str],
@@ -379,65 +339,3 @@ class MysqlDB(DatabaseTemplate):
         res_df = pd.concat(res)
 
         return res_df
-
-
-def read_sql(
-    database: MysqlDB,
-    table: str,
-    start: str = None,
-    end: str = None,
-    fields: Tuple[str] = None,
-    symbols: Tuple[str] = None,
-    query: Tuple[str] = None,
-    date_name: str = "date",
-    index_col: Tuple[str] = None,
-    is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = False,
-    other_sql: str = None,
-    op_format: str = None,
-    is_cache: bool = False,
-    **kwargs,
-):
-    """
-    读取 mysql 数据
-    """
-    return database.read_df(
-        table=table,
-        start=start,
-        end=end,
-        fields=fields,
-        symbols=symbols,
-        query=query,
-        date_name=date_name,
-        index_col=index_col,
-        is_sort_index=is_sort_index,
-        is_drop_duplicate_index=is_drop_duplicate_index,
-        other_sql=other_sql,
-        op_format=op_format,
-        is_cache=is_cache,
-        **kwargs,
-    )
-
-
-def save_sql(
-    database: MysqlDB,
-    df: pd.DataFrame,
-    table: str,
-    mode: str = "insert",
-    if_exists: str = "append",
-    index: bool = False,
-    is_drop_duplicate_index: bool = False,
-    **kwargs,
-) -> bool:
-    """
-    保存 dataframe 到 mysql 数据库
-    """
-    return database.save_df(
-        df=df,
-        table=table,
-        mode=mode,
-        if_exists=if_exists,
-        index=index,
-        is_drop_duplicate_index=is_drop_duplicate_index,
-        **kwargs,
-    )

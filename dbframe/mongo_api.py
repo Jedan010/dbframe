@@ -4,28 +4,26 @@ from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from lz4.block import compress as lz4_compress # type: ignore
-from lz4.block import decompress as lz4_decompress # type: ignore
+from lz4.block import compress as lz4_compress  # type: ignore
+from lz4.block import decompress as lz4_decompress  # type: ignore
 from pymongo import ASCENDING, MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from dbframe.cache import lru_cache
+from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.setting import CACHE_SIZE
 
 
 def lz4_compressHC(_str):
-    return lz4_compress(_str, mode='high_compression')
+    return lz4_compress(_str, mode="high_compression")
 
-INDEX_COLLECTION = 'index'
-# START = 'start'
-# END = 'end'
-START = 'start_date'
-END = 'end_date'
-SEGMENT = 'segment'
-DATA = 'data'
-METADATA = 'metadata'
+
+INDEX_COLLECTION = "index"
+START = "start_date"
+END = "end_date"
+SEGMENT = "segment"
+DATA = "data"
+METADATA = "metadata"
 
 
 class MongoDataFrameDB(DatabaseTemplate):
@@ -33,10 +31,11 @@ class MongoDataFrameDB(DatabaseTemplate):
     易于存取 DataFrame 的 Mongodb 数据库 API
     对于大数据进行压缩处理
     """
+
     def __init__(
         self,
         database: str,
-        host: str = 'localhost',  # '10.101.247.24',
+        host: str = "localhost",
         port: int = 27017,
         MAX_CHUNK_SIZE: int = 15 * 1024 * 1024,
     ) -> None:
@@ -59,9 +58,21 @@ class MongoDataFrameDB(DatabaseTemplate):
         self.database: Database = self.client[database]
         self.MAX_CHUNK_SIZE: int = MAX_CHUNK_SIZE
 
-        self._read_df_cache = lru_cache(CACHE_SIZE)(self._read_df)
+    def __str__(self):
+        return (
+            f"MongoDB(host={self._host}, database={self._database}, port={self._port})"
+        )
 
-    def _read_df(
+    @property
+    def _params(self):
+        return self._host, self._database, self._port
+
+    @property
+    def tables(self):
+        return self.database.list_collection_names()
+
+    @global_cache
+    def read_df(
         self,
         table: str,
         start: str = None,
@@ -69,11 +80,12 @@ class MongoDataFrameDB(DatabaseTemplate):
         fields: List[str] = None,
         symbols: List[str] = None,
         query: Dict[str, Any] = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         index_cols: Union[int, str, List[int], List[str]] = 0,
         is_sort_index: bool = True,
         is_drop_duplicates: bool = False,
         is_compress: bool = False,
+        is_cache: bool = False,
         **kwargs,
     ):
         if is_compress:
@@ -94,91 +106,15 @@ class MongoDataFrameDB(DatabaseTemplate):
             **kwargs,
         )
 
-    def read_df(
-        self,
-        table: str,
-        start: str = None,
-        end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: Dict[str, Any] = None,
-        date_name: str = 'date',
-        index_cols: Union[int, str, List[int], List[str]] = 0,
-        is_sort_index: bool = True,
-        is_drop_duplicates: bool = False,
-        is_compress: bool = False,
-        is_cache: bool = False,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """
-        读取 Mongo DataFrame 数据
-
-        Parameters
-        ----------
-        table : str
-            数据表名称
-        start : str | datetime, optional
-            起始日期, by default None
-        end : str | datetime, optional
-            结束日期, by default None
-        fields : tuple | str, optional
-            列名称列表, 如果为 str, 得到为 Series, by default None
-        symbols : tuple | str, optional
-            (如果有股票, 指数等) 选定的标的的名称列表
-        query : dict, optional
-            查询条件, by default None
-        index_cols : tuple[str] | tuple[int] | str | int, optional
-            选定作为 index 的列的名称或者序号, by default 0
-        sort : tuple[tuple], optional
-            排序的字段和方法序列, by default None
-        limit : int, optional
-            返回数量, by default None
-        is_sort_index : bool, optional
-            是否根据 index 排序, by default True
-        date_name : str, optional
-            日期字段名称, by default 'date'
-        is_sort_index : bool, optional
-            是否根据 index 排序, by default True
-        is_drop_duplicates: bool, optiona;
-            是否去重, by default True
-        is_compress : bool
-            数据是否压缩
-        is_cache : bool
-            数据是否缓存
-            
-        Returns
-        -------
-        DataFrame | Series
-            查询的结果
-        """
-        if is_cache:
-            func = self._read_df_cache
-        else:
-            func = self._read_df
-        return func(
-            table=table,
-            start=start,
-            end=end,
-            fields=fields,
-            symbols=symbols,
-            query=query,
-            date_name=date_name,
-            index_cols=index_cols,
-            is_sort_index=is_sort_index,
-            is_drop_duplicates=is_drop_duplicates,
-            is_compress=is_compress,
-            **kwargs,
-        )
-
     def save_df(
         self,
         df: pd.DataFrame,
         table: str,
         is_compress: bool = False,
-        mode: str = 'insert',
-        groupby_name: Union[str, List[str]] = 'date',
-        chunk_period: str = 'D',
-        date_name: str = 'date',
+        mode: str = "insert",
+        groupby_name: Union[str, List[str]] = "date",
+        chunk_period: str = "D",
+        date_name: str = "date",
         **kwargs,
     ) -> bool:
         """
@@ -200,10 +136,6 @@ class MongoDataFrameDB(DatabaseTemplate):
                 **kwargs,
             )
 
-    @property
-    def tables(self):
-        return self.database.list_collection_names()
-
     def insert_df(self, df: pd.DataFrame, table: str) -> bool:
         """
         将 DataFrame 插入至 MongoDB
@@ -222,7 +154,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         collection: Collection = self.database[table]
         if df.index.names[0] is not None:
             df = df.reset_index()
-        docs = df.to_dict('records')
+        docs = df.to_dict("records")
         collection.insert_many(docs)
         return True
 
@@ -250,10 +182,10 @@ class MongoDataFrameDB(DatabaseTemplate):
             df = df.to_frame()
         collection: Collection = self.database[table]
         if df.index.names[0] is None:
-            raise ValueError(f'更新 MongDB {table} 的 dataframe 应该先设置 index!')
+            raise ValueError(f"更新 MongDB {table} 的 dataframe 应该先设置 index!")
 
-        keys = df.index.to_frame(index=False).to_dict('records')
-        docs = df.to_dict('records')
+        keys = df.index.to_frame(index=False).to_dict("records")
+        docs = df.to_dict("records")
         for key, doc in zip(keys, docs):
             collection.update_one(key, {"$set": doc}, upsert=True)
         return True
@@ -262,7 +194,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        mode: str = 'update',
+        mode: str = "update",
     ) -> bool:
         """
         将 dataframe 保存至 MongoDB
@@ -275,14 +207,16 @@ class MongoDataFrameDB(DatabaseTemplate):
         table : str
             数据库的表名称
         mode : str, optional
-            保存数据的模式 'update' 或者 'insert' 
-            by default 'update'            
+            保存数据的模式 'update' 或者 'insert'
+            by default 'update'
         """
 
-        if mode == 'update' \
-            and df.index.names[0] is not None \
-            and table in self.database.list_collection_names() \
-            and self.database[table].estimated_document_count() != 0:
+        if (
+            mode == "update"
+            and df.index.names[0] is not None
+            and table in self.database.list_collection_names()
+            and self.database[table].estimated_document_count() != 0
+        ):
             return self.update_df(df, table)
         return self.insert_df(df, table)
 
@@ -295,7 +229,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         symbols: List[str] = None,
         query: Dict[str, Any] = None,
         index_cols: Union[int, str, List[int], List[str]] = 0,
-        date_name: str = 'date',
+        date_name: str = "date",
         sort: List = None,
         limit: int = 0,
         is_sort_index: bool = True,
@@ -303,7 +237,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         **kwargs,
     ) -> Union[pd.DataFrame, pd.Series]:
         """
-        从 MongoDB 中读取数据并转化为 DataFrame 
+        从 MongoDB 中读取数据并转化为 DataFrame
 
         Parameters
         ----------
@@ -345,21 +279,21 @@ class MongoDataFrameDB(DatabaseTemplate):
 
         if query is None:
             query = {}
-        projection = {'_id': 0}
+        projection = {"_id": 0}
 
         # 筛选日期
         if start is not None or end is not None:
             query[date_name] = {}
         if start is not None:
-            query[date_name]['$gte'] = pd.to_datetime(start)
+            query[date_name]["$gte"] = pd.to_datetime(start)
         if end is not None:
-            query[date_name]['$lte'] = pd.to_datetime(end)
+            query[date_name]["$lte"] = pd.to_datetime(end)
 
         # 筛选标的
         if symbols is not None:
             if isinstance(symbols, str):
                 symbols = [symbols]
-            query['symbol'] = {"$in": symbols}
+            query["symbol"] = {"$in": symbols}
 
         # 设定 index_col
         cols = list(collection.find_one({}, projection).keys())
@@ -369,9 +303,7 @@ class MongoDataFrameDB(DatabaseTemplate):
             if isinstance(index_cols, str):
                 index_cols = [index_cols]
             if isinstance(index_cols, list):
-                index_cols = [
-                    cols[c] if isinstance(c, int) else c for c in index_cols
-                ]
+                index_cols = [cols[c] if isinstance(c, int) else c for c in index_cols]
 
         # 筛选列名称
         _col = None  # 用作记录 fields 是否为 str 以判断是否输出 Series
@@ -405,10 +337,10 @@ class MongoDataFrameDB(DatabaseTemplate):
         self,
         df: pd.DataFrame,
         table: str,
-        groupby_name: Union[str, Tuple[str]] = 'date',
-        chunk_period: str = 'D',
-        date_name: str = 'date',
-        mode: str = 'update',
+        groupby_name: Union[str, Tuple[str]] = "date",
+        chunk_period: str = "D",
+        date_name: str = "date",
+        mode: str = "update",
     ) -> bool:
         """
         将 dataframe 按特定指标压缩后(以更新的方式)存储至 MongoDB
@@ -442,7 +374,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         # 压缩数据指标
         index_df = df.index.to_frame(index=False)
         if isinstance(groupby_name, str):
-            if groupby_name == 'date':
+            if groupby_name == "date":
                 groupby_name = date_name
             groupby_name: list = [groupby_name]
         else:
@@ -450,7 +382,8 @@ class MongoDataFrameDB(DatabaseTemplate):
         groupby_df: pd.DataFrame = index_df[groupby_name]
         if date_name in groupby_name and chunk_period is not None:
             groupby_df.loc[:, date_name] = pd.to_datetime(
-                groupby_df[date_name]).dt.to_period(chunk_period)
+                groupby_df[date_name]
+            ).dt.to_period(chunk_period)
         groupby_idx = pd.MultiIndex.from_frame(groupby_df)
 
         # 增加索引
@@ -458,10 +391,9 @@ class MongoDataFrameDB(DatabaseTemplate):
             index_collection: List[Tuple[str, int]] = [
                 (x, ASCENDING) for x in groupby_name + [START, END, SEGMENT]
             ]
-            self.add_index(table=table,
-                           index=index_collection,
-                           name=INDEX_COLLECTION,
-                           unique=True)
+            self.add_index(
+                table=table, index=index_collection, name=INDEX_COLLECTION, unique=True
+            )
 
         # 分批分块压缩存储数据
         for group in df.groupby(groupby_idx):
@@ -475,18 +407,17 @@ class MongoDataFrameDB(DatabaseTemplate):
             # 如果数据过大，则将数据分割个很多小块(chunk)分别存储
             for i in range(int(len(doc[DATA]) / self.MAX_CHUNK_SIZE + 1)):
                 chunk = {
-                    METADATA:
-                    doc[METADATA],
-                    DATA:
-                    doc[DATA][i * self.MAX_CHUNK_SIZE:(i + 1) *
-                              self.MAX_CHUNK_SIZE],
+                    METADATA: doc[METADATA],
+                    DATA: doc[DATA][
+                        i * self.MAX_CHUNK_SIZE : (i + 1) * self.MAX_CHUNK_SIZE
+                    ],
                 }
 
                 query = {START: start, END: end, SEGMENT: i}
                 for k, v in zip(groupby_name, group_val):
                     query[k] = str(v)
                 chunk.update(query)
-                if mode == 'update':
+                if mode == "update":
                     collection.update_one(query, {"$set": chunk}, upsert=True)
                 else:
                     collection.insert_one(chunk)
@@ -499,7 +430,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         fields: Tuple[str] = None,
         symbols: Tuple[str] = None,
         query: Dict[str, Any] = None,
-        date_name: str = 'date',
+        date_name: str = "date",
         sort: Tuple[Tuple[str, int]] = None,
         limit: int = 0,
         is_sort_index: bool = True,
@@ -507,7 +438,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         **kwargs,
     ) -> Union[pd.DataFrame, pd.Series]:
         """
-        从 MongoDB 中读取压缩数据, 将其解压缩后转化为 DataFrame 
+        从 MongoDB 中读取压缩数据, 将其解压缩后转化为 DataFrame
 
         Parameters
         ----------
@@ -531,7 +462,7 @@ class MongoDataFrameDB(DatabaseTemplate):
             是否根据 index 排序, by default True
         date_name : str, optional
             日期字段名称, by default 'date'
-            
+
         Returns
         -------
         DataFrame | Series
@@ -545,7 +476,7 @@ class MongoDataFrameDB(DatabaseTemplate):
 
         if query is None:
             query = {}
-        projection = {'_id': 0}
+        projection = {"_id": 0}
 
         # 筛选日期
         if start is not None:
@@ -554,10 +485,7 @@ class MongoDataFrameDB(DatabaseTemplate):
             query[START] = {"$lte": pd.to_datetime(end)}
 
         # 读取数据
-        segment_cursor = collection.find(query,
-                                         projection,
-                                         sort=sort,
-                                         limit=limit)
+        segment_cursor = collection.find(query, projection, sort=sort, limit=limit)
 
         # 如果数据过大分块存储，则将数据按照 start_date 和 end_date 合并
         group_keys = set(collection.find_one({}, {"_id": 0}).keys())
@@ -565,8 +493,7 @@ class MongoDataFrameDB(DatabaseTemplate):
         grouper = itemgetter(*group_keys)
 
         res = []
-        for _, segments in groupby(sorted(segment_cursor, key=grouper),
-                                   key=grouper):
+        for _, segments in groupby(sorted(segment_cursor, key=grouper), key=grouper):
             segments = list(segments)
             chunks = {
                 METADATA: segments[0][METADATA],
@@ -594,10 +521,10 @@ class MongoDataFrameDB(DatabaseTemplate):
             df = df.loc[(_dates >= _sta) & (_dates <= _end)]
         # df = df.loc[slice(start, end), ]
 
-        if symbols is not None and 'symbol' in df.index.names:
+        if symbols is not None and "symbol" in df.index.names:
             if isinstance(symbols, str):
                 symbols = [symbols]
-            df = df.loc[df.index.get_level_values('symbol').isin(symbols)]
+            df = df.loc[df.index.get_level_values("symbol").isin(symbols)]
 
         return df
 
@@ -608,8 +535,9 @@ class MongoDataFrameDB(DatabaseTemplate):
         """
 
         doc = {METADATA: {}, DATA: None}
-        doc[METADATA]['index_names'] = df.index.names if df.index.names[
-            0] is not None else None
+        doc[METADATA]["index_names"] = (
+            df.index.names if df.index.names[0] is not None else None
+        )
         df: pd.DataFrame = df.reset_index()
 
         data: bytes = b""
@@ -622,9 +550,8 @@ class MongoDataFrameDB(DatabaseTemplate):
             columns.append(str(c))
             arr = df[c].values
 
-            if arr.dtype == 'object':
-                arr = arr.astype(
-                    f"U{pd._libs.writers.max_len_string_array(arr)}")
+            if arr.dtype == "object":
+                arr = arr.astype(f"U{pd._libs.writers.max_len_string_array(arr)}")
             dtypes[col] = arr.dtype.str
 
             # 压缩数据
@@ -634,9 +561,9 @@ class MongoDataFrameDB(DatabaseTemplate):
             n += len(_data)
 
         doc[DATA] = data
-        doc[METADATA]['columns'] = columns
-        doc[METADATA]['lengths'] = lengths
-        doc[METADATA]['dtypes'] = dtypes
+        doc[METADATA]["columns"] = columns
+        doc[METADATA]["lengths"] = lengths
+        doc[METADATA]["dtypes"] = dtypes
 
         return doc
 
@@ -662,9 +589,9 @@ class MongoDataFrameDB(DatabaseTemplate):
             反序列化后的数据
         """
         _col = None  # 用于针对str的col，以得到Series而不是DataFrame
-        index_names = doc[METADATA]['index_names']
+        index_names = doc[METADATA]["index_names"]
         if cols is None:
-            cols = doc[METADATA]['columns']
+            cols = doc[METADATA]["columns"]
         elif isinstance(cols, str):
             _col = cols
             cols = [cols]
@@ -672,10 +599,13 @@ class MongoDataFrameDB(DatabaseTemplate):
             cols = list(set(cols) | set(index_names))
 
         # 解压缩数据
-        df = pd.DataFrame({
-            col: self._deserialize(doc, col)
-            for col in cols if col in doc[METADATA]['columns']
-        })
+        df = pd.DataFrame(
+            {
+                col: self._deserialize(doc, col)
+                for col in cols
+                if col in doc[METADATA]["columns"]
+            }
+        )
 
         if index_names:
             df = df.set_index(index_names)
@@ -687,9 +617,9 @@ class MongoDataFrameDB(DatabaseTemplate):
         """
         解压缩数据
         """
-        lns = doc[METADATA]['lengths'][col]
-        arr = doc[DATA][lns[0]:lns[1] + 1]
-        dtyp = doc[METADATA]['dtypes'][col]
+        lns = doc[METADATA]["lengths"][col]
+        arr = doc[DATA][lns[0] : lns[1] + 1]
+        dtyp = doc[METADATA]["dtypes"][col]
         return np.frombuffer(lz4_decompress(arr), dtype=dtyp)
 
     def get_last_data(self, table: str, is_compress: bool) -> pd.DataFrame:
@@ -709,36 +639,36 @@ class MongoDataFrameDB(DatabaseTemplate):
             查询得到的数据
         """
 
-        if table not in self.database.list_collection_names(
-        ) or self.database[table].find().count() == 0:
+        if (
+            table not in self.database.list_collection_names()
+            or self.database[table].find().count() == 0
+        ):
             return pd.DataFrame()
 
         if not is_compress:
-            return self.read_df_uncompress(table=table,
-                                           sort=[('_id', -1)],
-                                           limit=1)
+            return self.read_df_uncompress(table=table, sort=[("_id", -1)], limit=1)
         query = self.database[table].find(
             {},
             {
-                '_id': 0,
+                "_id": 0,
                 DATA: 0,
                 METADATA: 0,
                 SEGMENT: 0,
             },
-            sort=[('_id', -1)],
+            sort=[("_id", -1)],
             limit=1,
         )
         return self.read_df_compress(table=table, query=query)
 
     def delete_data(self, table: str, query: dict) -> int:
         """删除数据
-        
+
         Parameters
         ----------
         table : str
             数据表名称
         query : dict
-            删除条件        
+            删除条件
         """
         return self.database[table].delete_many(query)
 
@@ -765,108 +695,3 @@ class MongoDataFrameDB(DatabaseTemplate):
         """
         collection = self.database[table]
         return collection.create_index(index, name=name, unique=unique)
-
-    def __hash__(self) -> int:
-        return hash((self._host, self._port, self._database))
-
-
-def read_mongo(
-    database: MongoDataFrameDB,
-    table: str,
-    start: str = None,
-    end: str = None,
-    fields: List[str] = None,
-    symbols: List[str] = None,
-    query: Dict[str, Any] = None,
-    date_name: str = 'date',
-    index_cols: Union[int, str, List[int], List[str]] = 0,
-    is_sort_index: bool = True,
-    is_drop_duplicates: bool = False,
-    is_compress: bool = False,
-    is_cache: bool = False,
-    **kwargs,
-) -> Union[pd.DataFrame, pd.Series]:
-    """
-    读取 Mongo DataFrame 数据
-
-    Parameters
-    ----------
-    database : MongoDataFrameDB
-        数据库名称
-    table : str
-        数据表名称
-    start : str | datetime, optional
-        起始日期, by default None
-    end : str | datetime, optional
-        结束日期, by default None
-    fields : tuple | str, optional
-        列名称列表, 如果为 str, 得到为 Series, by default None
-    symbols : tuple | str, optional
-        (如果有股票, 指数等) 选定的标的的名称列表
-    query : dict, optional
-        查询条件, by default None
-    index_cols : tuple[str] | tuple[int] | str | int, optional
-        选定作为 index 的列的名称或者序号, by default 0
-    sort : tuple[tuple], optional
-        排序的字段和方法序列, by default None
-    limit : int, optional
-        返回数量, by default None
-    is_sort_index : bool, optional
-        是否根据 index 排序, by default True
-    date_name : str, optional
-        日期字段名称, by default 'date'
-    is_sort_index : bool, optional
-        是否根据 index 排序, by default True
-    is_drop_duplicates: bool, optiona;
-        是否去重, by default True
-    is_compress : bool
-        数据是否压缩
-    is_cache : bool
-        数据是否缓存
-        
-    Returns
-    -------
-    DataFrame | Series
-        查询的结果
-    """
-    return database.read_df(
-        table=table,
-        start=start,
-        end=end,
-        fields=fields,
-        symbols=symbols,
-        query=query,
-        date_name=date_name,
-        index_cols=index_cols,
-        is_sort_index=is_sort_index,
-        is_drop_duplicates=is_drop_duplicates,
-        is_compress=is_compress,
-        is_cache=is_cache,
-        **kwargs,
-    )
-
-
-def save_mongo(
-    database: MongoDataFrameDB,
-    df: pd.DataFrame,
-    table: str,
-    is_compress: bool = False,
-    mode: str = 'insert',
-    groupby_name: Union[str, Tuple[str]] = 'date',
-    chunk_period: str = 'D',
-    date_name: str = 'date',
-    **kwargs,
-) -> bool:
-    """
-    保存数据至 Mongo 数据库
-    """
-    return database.save_df(
-        df=df,
-        table=table,
-        is_compress=is_compress,
-        mode=mode,
-        groupby_name=groupby_name,
-        chunk_period=chunk_period,
-        date_name=date_name,
-        **kwargs,
-    )

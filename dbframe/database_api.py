@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 
 import pandas as pd
 
@@ -7,15 +6,33 @@ import pandas as pd
 class DatabaseTemplate(ABC):
     """数据库模板"""
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}{self._params}"
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    @property
+    def _params(self) -> tuple:
+        """数据库参数"""
+        return ()
+
+    @property
+    def tables(self) -> list[str]:
+        """
+        获取所有表
+        """
+        pass
+
     @abstractmethod
     def read_df(
         self,
         table: str,
         start: str = None,
         end: str = None,
-        fileds: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
+        fileds: list[str] = None,
+        symbols: list[str] = None,
+        query: list[str] = None,
         date_name: str = "date",
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
@@ -28,27 +45,9 @@ class DatabaseTemplate(ABC):
         pass
 
     @abstractmethod
-    def save_df(
-        self,
-        df: pd.DataFrame,
-        table: str,
-        **kwargs,
-    ) -> bool:
+    def save_df(self, df: pd.DataFrame, table: str, **kwargs) -> bool:
         """
         保存 dataFrame 数据至数据库中
-        """
-        pass
-
-    @property
-    def tables(self) -> List[str]:
-        """
-        获取所有表
-        """
-        pass
-
-    def __hash__(self) -> int:
-        """
-        hash 化数据库
         """
         pass
 
@@ -57,7 +56,7 @@ class DatabaseTemplate(ABC):
             lst = [lst]
         return str(tuple(lst)).replace(",)", ")")
 
-    def _format_query(self, query: List[str]) -> list[str]:
+    def _format_query(self, query: list[str]) -> list[str]:
         if query is None:
             query = []
         elif isinstance(query, (str, dict, tuple)):
@@ -68,17 +67,24 @@ class DatabaseTemplate(ABC):
             if isinstance(x, str):
                 new_query.append(x)
             elif isinstance(x, (list, tuple)):
-                if len(x) == 2:
+                if len(x) == 1:
+                    new_query.append(x[0])
+                elif len(x) == 2:
                     if x[1] is None:
                         continue
                     new_query.append(f"{x[0]} in {self._list2str(x[1])}")
+                elif len(x) == 3:
+                    _other = x[2]
+                    if isinstance(_other, (list, tuple, pd.Index)):
+                        _other = self._list2str(_other)
+                    new_query.append(f"{x[0]} {x[1]} {_other} ")
                 else:
-                    raise ValueError(f"query {x} must be a list or tuple with length 2")
+                    raise ValueError(f"query {x} format error")
             elif isinstance(x, dict):
                 for k, v in x.items():
                     new_query.append(f"{k} in {self._list2str(v)}")
             else:
-                raise ValueError(f"query {x} must be a str or list or tuple or dict")
+                raise ValueError(f"query {x} format error")
 
         return new_query
 
@@ -87,9 +93,9 @@ class DatabaseTemplate(ABC):
         table: str,
         start: str = None,
         end: str = None,
-        fields: List[str] = None,
-        symbols: List[str] = None,
-        query: List[str] = None,
+        fields: list[str] = None,
+        symbols: list[str] = None,
+        query: list[str] = None,
         date_name: str = "date",
         oper: str = "SELECT",
         other_sql: str = None,
@@ -137,34 +143,3 @@ class DatabaseTemplate(ABC):
             """
 
         return SQL
-
-
-def read_df(
-    database: DatabaseTemplate,
-    start: str = None,
-    end: str = None,
-    fileds: List[str] = None,
-    symbols: List[str] = None,
-    query: List[str] = None,
-    date_name: str = "date",
-    is_sort_index: bool = True,
-    is_drop_duplicate_index: bool = False,
-    is_cache: bool = False,
-    **kwargs,
-) -> pd.DataFrame:
-    return database.read_df(
-        start=start,
-        end=end,
-        fileds=fileds,
-        symbols=symbols,
-        query=query,
-        date_name=date_name,
-        is_sort_index=is_sort_index,
-        is_drop_duplicate_index=is_drop_duplicate_index,
-        is_cache=is_cache,
-        **kwargs,
-    )
-
-
-def save_df(database: DatabaseTemplate, df: pd.DataFrame, table: str, **kwargs) -> bool:
-    return database.save_df(df=df, table=table, **kwargs)
