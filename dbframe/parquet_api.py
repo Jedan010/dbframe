@@ -119,7 +119,9 @@ class ParquetDB(DatabaseTemplate):
 
         return df
 
-    def save_df(self, df: pd.DataFrame, table: str, **kwargs) -> bool:
+    def save_df(
+        self, df: pd.DataFrame, table: str, append: bool = True, **kwargs
+    ) -> bool:
         """
         保存 datafraome 数据至 parquet 文件
         """
@@ -131,7 +133,14 @@ class ParquetDB(DatabaseTemplate):
             df = df.to_frame()
 
         path_table = os.path.join(self.base_dir, table + ".parquet")
-        if table not in self.tables:
-            return df.to_parquet(path_table, **kwargs)
-        else:
+        
+        if append and table in self.tables:
             return write(filename=path_table, data=df, append=True)
+
+        return df.to_parquet(path_table, **kwargs)
+
+    def delete_table(self, table: str):
+        """删除表"""
+        path_table = os.path.join(self.base_dir, table + ".parquet")
+        if os.path.isfile(path_table):
+            os.remove(path_table)
