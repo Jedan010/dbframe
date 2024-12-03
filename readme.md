@@ -6,5 +6,5 @@
 - HDFS
 - Mongo
 - Sqlite
-- Postgresql
-- Paraquet
+- PostgreSQL
+- Parquet
