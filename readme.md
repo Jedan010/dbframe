@@ -5,3 +5,6 @@
 - Mysql
 - HDFS
 - Mongo
+- Sqlite
+- Postgresql
+- Paraquet
