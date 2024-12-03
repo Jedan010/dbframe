@@ -1,5 +1,4 @@
 from copy import deepcopy
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -109,11 +108,11 @@ class MysqlDB(DatabaseTemplate):
         table: str,
         start: str = None,
         end: str = None,
-        fields: Tuple[str] = None,
-        symbols: Tuple[str] = None,
-        query: Tuple[str] = None,
+        fields: tuple[str] = None,
+        symbols: tuple[str] = None,
+        query: tuple[str] = None,
         date_name: str = "date",
-        index_col: Tuple[str] = None,
+        index_col: tuple[str] = None,
         is_sort_index: bool = True,
         is_drop_duplicate_index: bool = False,
         other_sql: str = None,
@@ -196,31 +195,6 @@ class MysqlDB(DatabaseTemplate):
             if is_drop_duplicate_index:
                 df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
 
-        # if mode == 'update' and df.index.names[
-        #         0] is not None and table in self.engine.table_names():
-
-        #     idx = df.index
-        #     if isinstance(idx, pd.MultiIndex):
-        #         query_del = [
-        #             f"{name} in {_list2str(idx.levels[i].astype(str))}"
-        #             for i, name in enumerate(idx.names)
-        #         ]
-        #     else:
-        #         query_del = [f"{idx.name} in {_list2str(idx.astype(str))}"]
-
-        #     _df_store: pd.DataFrame = self._read_df(engine=self.engine,
-        #                                             table=table,
-        #                                             query=query_del,
-        #                                             index_col=idx.names)
-        #     if not _df_store.empty:
-        #         _df_store = _df_store.sort_index().pipe(
-        #             lambda x: x.loc[~x.index.duplicated()])
-        #         _idx = _df_store.reindex(_df_store.index.difference(idx)).index
-        #         df = df.append(_df_store.reindex(_idx)).sort_index()
-
-        #         sql_del = gen_sql(table, query=query_del, oper='DELETE')
-        #         self.engine.execute(sql_del)
-
         if df.index.names[0] is not None:
             df = df.reset_index()
 
@@ -253,7 +227,9 @@ class MysqlDB(DatabaseTemplate):
             query.append(f"{date_name} <= '{end}'")
         query = " AND ".join(query)
 
-        return self.engine.execute(f"DELETE FROM {table} WHERE {query}")
+        with self.engine.connect() as conn:
+            res = conn.exec_driver_sql(f"DELETE FROM {table} WHERE {query}")
+        return res
 
     def drop_duplicate_date(
         self,
@@ -265,14 +241,15 @@ class MysqlDB(DatabaseTemplate):
     ):
         """删除数据库中重复数据"""
         if start is None and end is None:
-            df = self._read_df(
+            df = self.read_df(
                 table=table, index_col=index_col, is_drop_duplicate_index=True
             )
-            self.engine.execute(f"DROP TABLE {table}")
+            with self.engine.connect() as conn:
+                conn.exec_driver_sql(f"DELETE FROM {table}")
             self.save_df(df=df, table=table)
 
         else:
-            df = self._read_df(
+            df = self.read_df(
                 table=table,
                 start=start,
                 end=end,

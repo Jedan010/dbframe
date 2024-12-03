@@ -96,6 +96,7 @@ class DatabaseTemplate(ABC):
         fields: list[str] = None,
         symbols: list[str] = None,
         query: list[str] = None,
+        schema: str = None,
         date_name: str = "date",
         oper: str = "SELECT",
         other_sql: str = None,
@@ -133,6 +134,9 @@ class DatabaseTemplate(ABC):
 
         other_sql = other_sql if other_sql else ""
         op_format = f"FORMAT {op_format}" if op_format else ""
+
+        if schema is not None:
+            table = f"{schema}.{table}"
 
         SQL = f"""
             {oper} {fields}

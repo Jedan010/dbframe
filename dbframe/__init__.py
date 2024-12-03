@@ -8,6 +8,11 @@ try:
     from dbframe.mongo_api import MongoDataFrameDB
 except Exception:
     pass
+try:
+    from dbframe.parquet_api import ParquetDB
+except Exception:
+    pass
 from dbframe.mysql_api import MysqlDB
-from dbframe.parquet_api import ParquetDB
+from dbframe.postgresq_api import PostgreSQLDB
 from dbframe.sqlite_api import SqliteDB
+

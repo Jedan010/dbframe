@@ -172,4 +172,6 @@ class SqliteDB(DatabaseTemplate):
 
     def remove(self, table: str, query: str):
         """删除数据"""
-        return self.engine.execute(f"DELETE FROM {table} WHERE {query}")
+        with self.engine.connect() as conn:
+            res = conn.exec_driver_sql(f"DELETE FROM {table} WHERE {query}")
+        return res
