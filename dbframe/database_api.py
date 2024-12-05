@@ -128,7 +128,10 @@ class DatabaseTemplate(ABC):
         if fields is None:
             fields = "*"
         elif not isinstance(fields, str):
-            fields = ", ".join(fields)
+            fields = ", ".join([f'"{x}"' for x in fields])
+        else:
+            fields = f'"{fields}"'
+
         if oper in ["delete", "DELETE"]:
             fields = ""
 
