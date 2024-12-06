@@ -104,9 +104,19 @@ class ParquetDB(DatabaseTemplate):
             query.append(("symbol", "in", symbols))
 
         if len(query) == 0:
-            query = None
+            filters = None
+        else:
+            filters = []
+        for q in query:
+            if len(q) == 2:
+                _a, _op, _b = (q[0], "in", q[1])
+                if isinstance(_b, (str, int, float)):
+                    _b = [_b]
+                filters.append((_a, _op, _b))
+            else:
+                filters.append(q)
 
-        parquet_table = read_table(path, columns=fields, filters=query, **kwargs)
+        parquet_table = read_table(path, columns=fields, filters=filters, **kwargs)
         df: pd.DataFrame = parquet_table.to_pandas()
 
         if index_col:
@@ -133,7 +143,7 @@ class ParquetDB(DatabaseTemplate):
             df = df.to_frame()
 
         path_table = os.path.join(self.base_dir, table + ".parquet")
-        
+
         if append and table in self.tables:
             return write(filename=path_table, data=df, append=True)
 
