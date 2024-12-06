@@ -9,6 +9,14 @@ setup(
     # 你要安装的包，通过 setuptools.find_packages 找到当前目录下有哪些包
     packages=find_packages(),
     install_requires=[
-        "clickhouse_driver",
-    ],  # "pymongo",
+        "sqlalchemy",
+        # "clickhouse_driver",
+        # "clickhouse-sqlalchemy",
+        # "pymysql",
+        # "pymongo",
+        # "lz4",
+        # "pyarrow",
+        # "fastparquet",
+        # "psycopg2-binary",
+    ],
 )
