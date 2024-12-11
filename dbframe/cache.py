@@ -9,16 +9,20 @@ import pandas as pd
 from dbframe.setting import LIMIT_SIZE, LIMIT_TYPE
 
 
-class _HashedSeq(list):
+def convert_to_tuple(obj):
+    """将列表、Series、Index、ndarray转换为tuple"""
+    if isinstance(obj, (list, tuple, pd.Index, pd.Series, np.ndarray)):
+        return tuple(convert_to_tuple(x) for x in obj)
+    return obj
+
+
+class HashedSeq(list):
     __slots__ = "hashvalue"
 
     def __init__(self, tup, hash=hash):
-        tup = (
-            tuple(x) if isinstance(x, (list, pd.Index, pd.Series, np.ndarray)) else x
-            for x in tup
-        )
+        tup = convert_to_tuple(tup)
         self[:] = tup
-        self.hashvalue = hash(tuple(tup))
+        self.hashvalue = hash(tup)
 
     def __hash__(self):
         return self.hashvalue
@@ -125,7 +129,7 @@ def global_cache(func):
         for item in kwargs.items():
             _key += item
 
-        key = _HashedSeq(_key)
+        key = HashedSeq(_key)
 
         if key in CACHE:
             return CACHE[key]
