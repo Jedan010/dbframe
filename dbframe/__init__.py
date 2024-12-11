@@ -15,4 +15,5 @@ except Exception:
 from dbframe.mysql_api import MysqlDB
 from dbframe.postgresq_api import PostgreSQLDB
 from dbframe.sqlite_api import SqliteDB
+from dbframe.sqlserver_api import SqlSeverDB
 
