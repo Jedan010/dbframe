@@ -1,6 +1,13 @@
 from abc import ABC, abstractmethod
+from copy import deepcopy
 
+import numpy as np
 import pandas as pd
+import sqlalchemy
+from sqlalchemy import create_engine
+from sqlalchemy.engine.url import URL, make_url
+
+from dbframe.cache import global_cache
 
 
 class DatabaseTemplate(ABC):
@@ -147,3 +154,218 @@ class DatabaseTemplate(ABC):
             """
 
         return SQL
+
+    def _set_url(url: URL, key: str, value: str):
+        if sqlalchemy.__version__ < "1.4":
+            setattr(url, key, value)
+        else:
+            url.set(key, value)
+
+
+class SQLDB(DatabaseTemplate):
+    DEFAULT_PORT: int
+
+    def __init__(
+        self,
+        drivername: str,
+        url: URL = None,
+        host: str = None,
+        port: str = None,
+        database: str = None,
+        username: str = None,
+        password: str = None,
+        query: dict = None,
+    ) -> None:
+        if url is None:
+            if host is None:
+                host = "localhost"
+            if port is None:
+                port = self.DEFAULT_PORT
+            if database is None:
+                database = "default"
+            if username is None:
+                username = "root"
+            if password is None:
+                password = ""
+            if query is None:
+                query = {}
+
+            url = URL(
+                drivername=drivername,
+                host=host,
+                port=port,
+                database=database,
+                username=username,
+                password=password,
+                query=query,
+            )
+        else:
+            if isinstance(url, str):
+                url = make_url(url)
+
+            url = deepcopy(url)
+            if host is not None:
+                self._set_url(url, "host", host)
+            if database is not None:
+                self._set_url(url, "database", database)
+            if username is not None:
+                self._set_url(url, "username", username)
+            if password is not None:
+                self._set_url(url, "password", password)
+            if port is not None:
+                self._set_url(url, "port", port)
+            if query is not None:
+                self._set_url(url, "query", query)
+
+        self._url = url
+        self.engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+        self._host = self.engine.url.host
+        self._port = self.engine.url.port
+        self._database = self.engine.url.database
+        self._username = self.engine.url.username
+        self._password = self.engine.url.password
+        self._query = self.engine.url.query
+
+    @property
+    def _params(self):
+        return (self._host, self._port, self._database, self._username)
+
+    def execute_sql(self, sql: str, **kwargs) -> pd.DataFrame:
+        """执行 SQL 语句"""
+        return pd.read_sql(sql=sql, con=self.engine, **kwargs)
+
+    @abstractmethod
+    def get_table_columns(self, table: str, schema: str = None) -> list[str]:
+        """获取表字段名"""
+        pass
+
+    @global_cache
+    def read_df(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        fields: tuple[str] = None,
+        symbols: tuple[str] = None,
+        query: tuple[str] = None,
+        schema: str = None,
+        date_name: str = "date",
+        index_col: tuple[str] = None,
+        is_sort_index: bool = True,
+        is_drop_duplicate_index: bool = False,
+        other_sql: str = None,
+        op_format: str = None,
+        is_cache: bool = False,
+        **kwargs,
+    ):
+        """
+        读取 SQL 数据
+        """
+
+        cols = self.get_table_columns(table=table, schema=schema)
+
+        if index_col is not None:
+            if isinstance(index_col, (int, str)):
+                index_col = [index_col]
+            index_col = [cols[c] if isinstance(c, int) else c for c in index_col]
+            index_col = [c for c in index_col if c in cols]
+        if fields is not None and index_col is not None:
+            if isinstance(fields, str):
+                fields = [fields]
+            fields: pd.Index = pd.Index(fields)
+            fields = fields.union(index_col, sort=False)
+        if index_col is not None and len(index_col) == 0:
+            index_col = None
+
+        SQL = self._gen_sql(
+            table=table,
+            start=start,
+            end=end,
+            fields=fields,
+            symbols=symbols,
+            query=query,
+            schema=schema,
+            date_name=date_name,
+            oper="SELECT",
+            other_sql=other_sql,
+            op_format=op_format,
+        )
+
+        df: pd.DataFrame = self.execute_sql(SQL, index_col=index_col, **kwargs)
+
+        if df.empty:
+            return df
+
+        df = df.replace(["None"], np.nan)
+        if index_col is not None:
+            if is_sort_index:
+                df.sort_index(inplace=True)
+            if is_drop_duplicate_index:
+                df = df.loc[~df.index.duplicated()]
+
+        return df
+
+    def save_df(
+        self,
+        df: pd.DataFrame,
+        table: str,
+        schema: str = None,
+        if_exists: str = "append",
+        index: bool = False,
+        is_drop_duplicate_index: bool = False,
+        **kwargs,
+    ) -> bool:
+        """
+        保存 dataframe 到 SQL 数据库
+        """
+        if df.empty:
+            return False
+
+        if df.index.names[0] is not None:
+            df = df.sort_index()
+            if is_drop_duplicate_index:
+                df = df.pipe(lambda x: x.loc[~x.index.duplicated()])
+
+        if df.index.names[0] is not None:
+            df = df.reset_index()
+
+        res = df.to_sql(
+            name=table,
+            con=self.engine,
+            if_exists=if_exists,
+            index=index,
+            schema=schema,
+            **kwargs,
+        )
+
+        return bool(res)
+
+    def remove(
+        self,
+        table: str,
+        start: str = None,
+        end: str = None,
+        date_name: str = "date",
+        query: list[str] = None,
+        schema: str = None,
+        **kwargs,
+    ) -> bool:
+        """
+        删除数据
+        """
+
+        SQL = self._gen_sql(
+            table=table,
+            start=start,
+            end=end,
+            fields=None,
+            symbols=None,
+            query=query,
+            schema=schema,
+            date_name=date_name,
+            oper="DELETE",
+        )
+
+        res = self.execute_sql(SQL, **kwargs)
+
+        return bool(res)
