@@ -409,6 +409,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
             "datetime64[D]": "Date",
             "datetime64[ns]": "DateTime",
             "datetime64[us]": "DateTime",
+            "datetime64[ns, UTC]": "DateTime",
         }
 
         if df.index.names[0] is not None:
