@@ -339,7 +339,6 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return df
 
-    @global_cache
     def read_df_multi(
         self,
         table_fields: dict[str, list[str]],
