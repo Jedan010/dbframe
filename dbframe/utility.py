@@ -1,5 +1,5 @@
-from functools import partial, wraps
 import logging
+from functools import wraps
 from time import sleep
 from typing import Callable, Type
 
@@ -34,16 +34,16 @@ def repeat(
                     return func(*args, **kwargs)
                 except Exception as e:
                     if not isinstance(e, error_type):
-                        logging.error(f"Unexpected error occurred: {e}")
+                        logging.error(f"Unexpected Error Occurred: {e}")
                         raise e
                     if attempt == n_repeat - 1:
                         logging.error(
-                            f"{logging_info}, {e}. Attempt {attempt + 1} failed."
+                            f"{logging_info}, {e}. Attempt {attempt + 1} Failed."
                         )
                         raise e
                     logging.warning(
                         f"{logging_info}, {e}. "
-                        f"Attempt {attempt + 1} failed. "
+                        f"Attempt {attempt + 1} Failed. "
                         f"Retrying..."
                     )
                     if attempt < n_repeat - 1:
@@ -129,6 +129,12 @@ def get_database_error_types():
 # 默认的数据库错误类型
 DEFAULT_DB_ERROR_TYPES = get_database_error_types()
 
-db_repet = partial(
-    repeat, error_type=DEFAULT_DB_ERROR_TYPES, logging_info="Database Error Occurred"
-)
+
+@wraps(repeat)
+def db_repet(
+    *args,
+    error_type=DEFAULT_DB_ERROR_TYPES,
+    logging_info="Database Error Occurred",
+    **kwargs,
+):
+    return repeat(*args, error_type=error_type, logging_info=logging_info, **kwargs)
