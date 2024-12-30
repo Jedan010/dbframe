@@ -122,7 +122,8 @@ def global_cache(func):
         is_cache = kwargs.pop("is_cache", False)
 
         _key = ("[database]", self.__class__.__name__)
-        _key += self._params
+        if hasattr(self, "_params"):
+            _key += ("[params]", getattr(self, "_params"))
         _key += ("[func]", func.__name__)
         _key += ("[args]", *args)
         _key += ("[kwargs]",)
