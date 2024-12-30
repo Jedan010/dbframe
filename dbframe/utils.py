@@ -1,5 +1,5 @@
 import logging
-from functools import wraps
+from functools import partial, update_wrapper, wraps
 from time import sleep
 from typing import Callable, Type
 
@@ -136,6 +136,7 @@ def db_repet(
     logging_info="Database Error Occurred",
     **kwargs,
 ):
-    return wraps(
-        repeat(*args, error_type=error_type, logging_info=logging_info, **kwargs)
-    )
+    return repeat(*args, error_type=error_type, logging_info=logging_info, **kwargs)
+
+
+db_repet = wraps(db_repet)(repeat)
