@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import global_cache
-from dbframe.utils import db_repet
+from dbframe.utils import db_repeat
 
 
 class DatabaseTemplate(ABC):
@@ -237,7 +237,7 @@ class SQLDB(DatabaseTemplate):
     def _params(self):
         return (self._host, self._port, self._database, self._username)
 
-    @db_repet
+    @db_repeat
     def execute(self, sql: str, **kwargs):
         """执行 SQL 语句"""
         with self.engine.connect() as conn:
@@ -245,7 +245,7 @@ class SQLDB(DatabaseTemplate):
             conn.commit()
         return res
 
-    @db_repet
+    @db_repeat
     def execute_sql(self, sql: str, **kwargs) -> pd.DataFrame:
         """通过 pandas 执行 SQL 语句"""
         return pd.read_sql(sql=sql, con=self.engine, **kwargs)
@@ -255,7 +255,7 @@ class SQLDB(DatabaseTemplate):
         """获取表字段名"""
         pass
 
-    @db_repet
+    @db_repeat
     @global_cache
     def read_df(
         self,
@@ -322,7 +322,7 @@ class SQLDB(DatabaseTemplate):
 
         return df
 
-    @db_repet
+    @db_repeat
     def save_df(
         self,
         df: pd.DataFrame,

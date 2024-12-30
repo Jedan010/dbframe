@@ -11,7 +11,7 @@ from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.utils import db_repet
+from dbframe.utils import db_repeat
 
 
 class ClickHouseDB(Client, DatabaseTemplate):
@@ -202,7 +202,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
     def databases(self):
         return [x[0] for x in self.execute("show databases")]
 
-    @db_repet
+    @db_repeat
     @global_cache
     def read_df(
         self,
@@ -341,7 +341,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return df
 
-    @db_repet
+    @db_repeat
     def read_df_multi(
         self,
         table_fields: dict[str, list[str]],
@@ -382,7 +382,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
 
         return df
 
-    @db_repet
+    @db_repeat
     def cread_table(
         self,
         df: pd.DataFrame,
@@ -480,7 +480,7 @@ class ClickHouseDB(Client, DatabaseTemplate):
         df = df.apply(lambda x: x.astype(table_type[x.name], errors="ignore"))
         return df
 
-    @db_repet
+    @db_repeat
     def save_df(
         self,
         df: pd.DataFrame,
