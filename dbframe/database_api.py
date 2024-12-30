@@ -179,6 +179,7 @@ class SQLDB(DatabaseTemplate):
         username: str = None,
         password: str = None,
         query: dict = None,
+        **kwargs,
     ) -> None:
         if url is None:
             if host is None:
@@ -222,7 +223,9 @@ class SQLDB(DatabaseTemplate):
                 self._set_url(url, "query", query)
 
         self._url = url
-        self.engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+        self.engine = create_engine(
+            url, pool_pre_ping=True, pool_recycle=3600, **kwargs
+        )
         self._host = self.engine.url.host
         self._port = self.engine.url.port
         self._database = self.engine.url.database
@@ -271,7 +274,7 @@ class SQLDB(DatabaseTemplate):
         op_format: str = None,
         is_cache: bool = False,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         """
         读取 SQL 数据
         """
@@ -410,3 +413,63 @@ class SQLDB(DatabaseTemplate):
             **kwargs,
         )
         self.save_df(df=df, table=table)
+
+    def get_table_date_desc(
+        self,
+        tables: list[str],
+        start_date: str = None,
+        end_date: str = None,
+        index_col: list[str] = None,
+        groupby_name: list[str] = None,
+        date_name: str = "date",
+        query: list[str] = None,
+        schema: str = None,
+        including_table_name: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame:
+        """
+        获取表中数据的日期统计数据
+        包括起始日期和结束日期和日期数量
+        """
+
+        if isinstance(tables, str):
+            tables = [tables]
+
+        res = []
+        other_sql = None
+        if groupby_name is not None:
+            if isinstance(groupby_name, str):
+                groupby_name = [groupby_name]
+            if index_col is None:
+                index_col = groupby_name
+            other_sql = f"GROUP BY {','.join(groupby_name)}"
+
+        for table in tables:
+            _df: pd.DataFrame = self.read_df(
+                table=table,
+                start=start_date,
+                end=end_date,
+                fields=[
+                    f"MIN({date_name}) AS start_date",
+                    f"MAX({date_name}) AS end_date",
+                    f"COUNT(DISTINCT({date_name})) AS date_num",
+                ],
+                date_name=date_name,
+                index_col=index_col,
+                other_sql=other_sql,
+                query=query,
+                schema=schema,
+                **kwargs,
+            )
+
+            if not _df.empty and including_table_name:
+                _df = _df.assign(table_name=table)
+
+            res.append(_df)
+
+        if not res:
+            return pd.DataFrame()
+
+        res_df = pd.concat(res)
+
+        return res_df
