@@ -11,7 +11,7 @@ from sqlalchemy.engine.url import URL, make_url
 
 from dbframe.cache import global_cache
 from dbframe.database_api import DatabaseTemplate
-from dbframe.utility import db_repet
+from dbframe.utils import db_repet
 
 
 class ClickHouseDB(Client, DatabaseTemplate):
