@@ -130,11 +130,12 @@ def get_database_error_types():
 DEFAULT_DB_ERROR_TYPES = get_database_error_types()
 
 
-@wraps(repeat)
 def db_repet(
     *args,
     error_type=DEFAULT_DB_ERROR_TYPES,
     logging_info="Database Error Occurred",
     **kwargs,
 ):
-    return repeat(*args, error_type=error_type, logging_info=logging_info, **kwargs)
+    return wraps(
+        repeat(*args, error_type=error_type, logging_info=logging_info, **kwargs)
+    )
