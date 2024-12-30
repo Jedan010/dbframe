@@ -235,8 +235,16 @@ class SQLDB(DatabaseTemplate):
         return (self._host, self._port, self._database, self._username)
 
     @db_repet
-    def execute_sql(self, sql: str, **kwargs) -> pd.DataFrame:
+    def execute(self, sql: str, **kwargs):
         """执行 SQL 语句"""
+        with self.engine.connect() as conn:
+            res = conn.exec_driver_sql(sql, **kwargs)
+            conn.commit()
+        return res
+
+    @db_repet
+    def execute_sql(self, sql: str, **kwargs) -> pd.DataFrame:
+        """通过 pandas 执行 SQL 语句"""
         return pd.read_sql(sql=sql, con=self.engine, **kwargs)
 
     @abstractmethod
@@ -360,7 +368,6 @@ class SQLDB(DatabaseTemplate):
         """
         删除数据
         """
-
         SQL = self._gen_sql(
             table=table,
             start=start,
@@ -372,7 +379,34 @@ class SQLDB(DatabaseTemplate):
             date_name=date_name,
             oper="DELETE",
         )
+        return self.execute(SQL, **kwargs)
 
-        res = self.execute_sql(SQL, **kwargs)
-
-        return bool(res)
+    def drop_duplicate(
+        self,
+        table: str,
+        index_col: list[str],
+        start: str = None,
+        end: str = None,
+        date_name: str = "date",
+        schema: str = None,
+        **kwargs,
+    ):
+        """删除数据库中重复数据"""
+        df = self.read_df(
+            table=table,
+            start=start,
+            end=end,
+            index_col=index_col,
+            is_drop_duplicate_index=True,
+            schema=schema,
+            **kwargs,
+        )
+        self.remove(
+            table=table,
+            start=start,
+            end=end,
+            date_name=date_name,
+            schema=schema,
+            **kwargs,
+        )
+        self.save_df(df=df, table=table)
