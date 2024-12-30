@@ -237,6 +237,7 @@ class SQLDB(DatabaseTemplate):
     def _params(self):
         return (self._host, self._port, self._database, self._username)
 
+    @db_repet
     def execute(self, sql: str, **kwargs):
         """执行 SQL 语句"""
         with self.engine.connect() as conn:
@@ -244,6 +245,7 @@ class SQLDB(DatabaseTemplate):
             conn.commit()
         return res
 
+    @db_repet
     def execute_sql(self, sql: str, **kwargs) -> pd.DataFrame:
         """通过 pandas 执行 SQL 语句"""
         return pd.read_sql(sql=sql, con=self.engine, **kwargs)
