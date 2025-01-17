@@ -1,5 +1,5 @@
 import logging
-from functools import partial, update_wrapper, wraps
+from functools import wraps
 from time import sleep
 from typing import Callable, Type
 
