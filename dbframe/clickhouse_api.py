@@ -770,9 +770,10 @@ class ClickHouseDB(Client, DatabaseTemplate):
             table=table,
             start=start_date,
             end=end_date,
-            fields=[f"DISTINCT {distinct_name}"],
+            fields=[],
             index_col=distinct_name,
             query=query,
+            is_drop_duplicate_index=True,
             **kwargs,
         ).index
 
